@@ -1,8 +1,21 @@
-fastapi
-uvicorn
-pydantic
-sqlalchemy
-pandas
-langchain
-langgraph
-langchain-google-genai
+# FastAPI & Server
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+
+# LangChain + Groq
+langchain==0.3.0
+langchain-groq==0.2.0
+langchain-core==0.3.0
+langchain-community==0.3.0
+
+# Environment Variables
+python-dotenv==1.0.1
+
+# Utilities
+pydantic==2.8.2
+
+# Database
+sqlalchemy==2.0.35
+
+# File Upload & Multipart
+python-multipart==0.0.32
