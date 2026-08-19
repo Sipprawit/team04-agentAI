@@ -41,7 +41,7 @@ def init_mock_db():
     try:
         # ตรวจสอบว่ามีข้อมูลในตาราง customers หรือไม่
         if db.query(Customer).first() is None:
-            print("🌱 กำลังสร้างข้อมูลจำลอง (Mock Data) สำหรับร้านค้า (E-Commerce)...")
+            print("[MockData] Creating mock data for E-Commerce...")
             
             # 1. สร้าง Customers (10 รายการ)
             customers_data = [
@@ -100,9 +100,9 @@ def init_mock_db():
             
             db.add_all(orders_data)
             db.commit()
-            print("✅ สร้างข้อมูลจำลอง E-Commerce ทั้ง 3 ตารางเสร็จเรียบร้อย!")
+            print("[MockData] Mock data created successfully (3 tables)")
         else:
-            print("✅ ข้อมูลจำลองมีอยู่แล้ว ข้ามการสร้างใหม่")
+            print("[MockData] Mock data already exists, skipping.")
             
     finally:
         db.close()

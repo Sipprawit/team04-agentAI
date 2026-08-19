@@ -25,3 +25,8 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def init_db():
+    """สร้างตารางและ Seed ข้อมูลจำลองตอน Startup (ถ้ายังไม่มี)"""
+    from app.models.mock_data import init_mock_db
+    init_mock_db()

@@ -15,11 +15,11 @@ async def lifespan(app: FastAPI):
     Lifespan context manager สำหรับ FastAPI
     ทำงานก่อนที่แอปจะเริ่มรัน (Startup) และหลังแอปปิดตัวลง (Shutdown)
     """
-    print("[Startup] กำลังเชื่อมต่อและตรวจสอบฐานข้อมูล...")
+    print("[Startup] Initializing database...")
     init_db()
-    print("[Startup] ระบบพร้อมใช้งานแล้ว!")
+    print("[Startup] System ready!")
     yield
-    print("[Shutdown] กำลังปิดการเชื่อมต่อ...")
+    print("[Shutdown] Closing connections...")
 
 app = FastAPI(
     title=settings.APP_NAME,
