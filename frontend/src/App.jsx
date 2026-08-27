@@ -45,7 +45,9 @@ function App() {
     setIsLoading(true);
 
     try {
-      const data = await sendQuery(userMessage.text);
+      // ส่งประวัติแชทล่าสุด 5 ข้อความเพื่อให้ AI มี context
+      const recentHistory = messages.slice(-5).map(m => ({ role: m.role, text: m.text }));
+      const data = await sendQuery(userMessage.text, recentHistory);
       const aiMessage = { 
         role: 'ai', 
         text: data.response,

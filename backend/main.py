@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
     
     # 2. ตรวจสอบความพร้อมของระบบ AI
     if not os.getenv("GROQ_API_KEY"):
-        print("⚠️ WARNING: ไม่พบ GROQ_API_KEY ในไฟล์ .env! ระบบ AI อาจทำงานไม่สมบูรณ์")
+        print("[WARNING] GROQ_API_KEY not found in .env! AI system may not work properly.")
     else:
         print("[Startup] AI Core (Groq) is ready to connect.")
         

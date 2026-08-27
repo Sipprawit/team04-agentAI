@@ -1,7 +1,10 @@
 import api from './api';
 
-export const sendQuery = async (queryText) => {
-  const response = await api.get(`/query?q=${encodeURIComponent(queryText)}`);
+export const sendQuery = async (queryText, chatHistory = []) => {
+  const response = await api.post('/query', {
+    q: queryText,
+    chat_history: chatHistory,
+  });
   return response.data;
 };
 
