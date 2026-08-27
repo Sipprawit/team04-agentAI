@@ -1,33 +1,104 @@
-from sqlalchemy import text
+import signal
+import threading
+from sqlalchemy import text, event
 from app.db.database import engine
 from app.part1_data_security.sandbox.audit_logger import log_execution
 
-def execute_sql_in_sandbox(sql_query: str) -> dict:
+# ============================================
+# ข้อจำกัดด้านความปลอดภัย
+# ============================================
+MAX_ROWS = 500          # จำนวนแถวผลลัพธ์สูงสุดที่อนุญาต
+QUERY_TIMEOUT_SEC = 10  # จำกัดเวลาการรัน Query (วินาที)
+
+
+class QueryTimeoutError(Exception):
+    """Exception เมื่อ Query ใช้เวลาเกินกำหนด"""
+    pass
+
+
+def _sqlite_timeout_handler(conn, timeout_sec: int):
+    """
+    ตั้ง progress_handler สำหรับ SQLite เพื่อตรวจสอบ Timeout
+    SQLite จะเรียก progress_handler ทุก N instructions
+    ถ้า handler คืนค่า non-zero จะยกเลิก Query ทันที
+    """
+    deadline = threading.Event()
+
+    # ตั้งเวลาให้ deadline fire หลังจาก timeout_sec
+    timer = threading.Timer(timeout_sec, deadline.set)
+    timer.daemon = True
+    timer.start()
+
+    raw_conn = conn.connection.dbapi_connection
+    # เรียกทุก 1000 SQLite VM instructions
+    raw_conn.set_progress_handler(lambda: 1 if deadline.is_set() else 0, 1000)
+
+    return timer
+
+
+def _clear_timeout_handler(conn, timer):
+    """ล้าง progress_handler หลังรัน Query เสร็จ"""
+    timer.cancel()
+    raw_conn = conn.connection.dbapi_connection
+    raw_conn.set_progress_handler(None, 0)
+
+
+def execute_sql_in_sandbox(sql_query: str, max_rows: int = MAX_ROWS, timeout_sec: int = QUERY_TIMEOUT_SEC) -> dict:
     """
     ระบบสภาพแวดล้อมจำลองเพื่อความปลอดภัย (Secure Code Execution Sandbox System)
-    นำคำสั่ง SQL จาก AI มารันในสภาพแวดล้อมจำลองแบบจำกัดความเสี่ยง
+    - นำคำสั่ง SQL จาก AI มารันในสภาพแวดล้อมจำลองแบบจำกัดความเสี่ยง
+    - จำกัดจำนวนแถวผลลัพธ์สูงสุด (Row Limit)
+    - จำกัดเวลาการรัน Query (Timeout)
+    - บันทึก Audit Log ทุกครั้ง
     """
+    timer = None
     try:
         with engine.connect() as conn:
+            # --- ตั้ง Timeout Handler ---
+            timer = _sqlite_timeout_handler(conn, timeout_sec)
+
             result = conn.execute(text(sql_query))
+
             if result.returns_rows:
-                rows = result.fetchall()
+                # --- จำกัดจำนวนแถว (Row Limit) ---
+                rows = result.fetchmany(max_rows + 1)
+                is_truncated = len(rows) > max_rows
+                if is_truncated:
+                    rows = rows[:max_rows]
                 data = [dict(row._mapping) for row in rows]
             else:
                 data = []
-                
+                is_truncated = False
+
+            # --- ล้าง Timeout Handler ---
+            _clear_timeout_handler(conn, timer)
+            timer = None
+
         # บันทึกประวัติสำเร็จ
         log_execution(sql_query, status="success", error_message=None)
-        return {
+        result_dict = {
             "status": "success",
             "rows_count": len(data),
-            "data": data
+            "data": data,
         }
+        if is_truncated:
+            result_dict["warning"] = f"Results truncated to {max_rows} rows (original result exceeded limit)"
+        return result_dict
+
     except Exception as e:
         error_msg = str(e)
+
+        # ตรวจจับว่าเป็น Timeout (SQLite interrupted)
+        if "interrupted" in error_msg.lower():
+            error_msg = f"Query timeout: exceeded {timeout_sec} seconds limit"
+
         # บันทึกประวัติข้อผิดพลาด
         log_execution(sql_query, status="error", error_message=error_msg)
         return {
             "status": "error",
             "message": error_msg
         }
+    finally:
+        # ทำให้แน่ใจว่า timer ถูกยกเลิกเสมอ
+        if timer is not None:
+            timer.cancel()
