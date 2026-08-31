@@ -1,41 +1,41 @@
 from app.part1_data_security.integration.schema_inspector import get_database_schema_info
 
+
 def build_sql_prompt(user_query: str, chat_history: list = None) -> str:
     """
-    สร้าง Prompt สำหรับแปลงภาษาธรรมชาติเป็น SQL พร้อมตัวอย่าง (Few-shot examples)
+    สร้าง Prompt สำหรับแปลงภาษาธรรมชาติเป็น SQL
+    รวมทั้งคำถาม, โครงสร้างตาราง (Schema) และประวัติการสนทนา
     """
     schema = get_database_schema_info()
-    
+
+    history_lines = []
+    if chat_history:
+        for msg in chat_history[-5:]:
+            if isinstance(msg, dict):
+                role = msg.get("role", "user")
+                text_content = msg.get("text") or msg.get("content") or ""
+                if text_content:
+                    history_lines.append(f"- {role}: {text_content}")
+            elif hasattr(msg, "content"):
+                role = getattr(msg, "role", "user")
+                history_lines.append(f"- {role}: {msg.content}")
+
     history_str = ""
-    if chat_history and len(chat_history) > 0:
-        history_str = "\nประวัติการสนทนาก่อนหน้า:\n" 
-        for msg in chat_history[-3:]: 
-            role = "ผู้ใช้" if msg.get('role') == 'user' else "AI"
-            history_str += f"- {role}: {msg.get('text', '')}\n"
+    if history_lines:
+        history_str = "\nประวัติการสนทนาก่อนหน้า:\n" + "\n".join(history_lines)
 
-    # [NEW] เพิ่ม Few-shot examples เพื่อสอน AI ให้เขียน Query ตรงสเปก
-    few_shot_examples = """
-ตัวอย่างการแปลงคำถามเป็น SQL:
-คำถาม: "ขอดูยอดขายรวมของพนักงานแต่ละคน"
-SQL: SELECT e.name, SUM(s.amount) as total_sales FROM sales s JOIN employees e ON s.employee_id = e.id GROUP BY e.name;
-
-คำถาม: "สินค้าไหนขายดีที่สุด 5 อันดับแรก"
-SQL: SELECT p.product_name, SUM(o.quantity) as total_sold FROM order_items o JOIN products p ON o.product_id = p.id GROUP BY p.product_name ORDER BY total_sold DESC LIMIT 5;
-"""
-
-    prompt = f"""
-คุณคือผู้เชี่ยวชาญด้าน SQLite Database
-นี่คือโครงสร้างตารางในฐานข้อมูลปัจจุบัน:
+    prompt = f"""คุณคือผู้เชี่ยวชาญด้าน SQLite Database ขั้นสูง
+นี่คือโครงสร้างตารางและความสัมพันธ์ในฐานข้อมูลปัจจุบัน:
 {schema}
 {history_str}
-{few_shot_examples}
 
-คำถามปัจจุบันจากผู้ใช้: "{user_query}"
+คำถามจากผู้ใช้: "{user_query}"
 
 ข้อบังคับอย่างเคร่งครัด:
-1. คืนค่าเฉพาะคำสั่ง SQL เพียวๆ เท่านั้น ห้ามมีคำอธิบาย ห้ามมี markdown ครอบ
-2. หากต้องแสดงข้อมูลที่มีการเชื่อมโยง ให้ใช้ JOIN ดึงชื่อมาแสดงด้วยเสมอ ห้ามแสดงแค่ id
-3. ใช้เฉพาะชื่อตารางและคอลัมน์ที่มีอยู่จริงใน Schema เท่านั้น
-4. คำสั่ง SQL ต้องขึ้นต้นด้วย SELECT หรือ WITH เท่านั้น ห้ามใช้ PRAGMA หรือคำสั่งเปลี่ยนแปลงข้อมูล
+1. คืนค่าเฉพาะคำสั่ง SQL เพียวๆ เท่านั้น ห้ามมีคำอธิบาย ห้ามมีข้อความนำหน้า ห้ามใส่ markdown block ครอบ
+2. หากต้องแสดงข้อมูลที่เกี่ยวข้อง เช่น ชื่อสินค้า หรือ ชื่อลูกค้า ให้ใช้ JOIN เพื่อดึง name มาแสดงเสมอ ไม่แสดงเฉพาะ foreign key id
+3. ใช้เฉพาะชื่อตารางและชื่อคอลัมน์ที่ระบุใน Schema เท่านั้น
+4. คำสั่ง SQL ต้องขึ้นต้นด้วย SELECT หรือ WITH เท่านั้น
+5. ไม่ใช้คำสั่ง DDL หรือ DML เช่น DROP, DELETE, INSERT, UPDATE เด็ดขาด
 """
     return prompt

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
 import shutil
 import os
+import uuid
 from app.part1_data_security.integration.csv_uploader import upload_csv_to_db, validate_file_extension, ALLOWED_EXTENSIONS
 from app.part1_data_security.integration.schema_inspector import get_database_schema_info
 from app.part1_data_security.sandbox.audit_logger import get_audit_logs, get_audit_stats
@@ -13,6 +14,7 @@ async def upload_csv(file: UploadFile = File(...), table_name: str = Form(...)):
     """
     อัปโหลดไฟล์ CSV และบันทึกลงฐานข้อมูล
     - ตรวจสอบนามสกุลไฟล์ (เฉพาะ .csv)
+    - ใช้ UUID สำหรับชื่อไฟล์ temp ป้องกัน Path Traversal
     - ตรวจจับชนิดข้อมูลอัตโนมัติ (INTEGER, REAL, DATE, TEXT)
     """
     # --- ตรวจสอบนามสกุลไฟล์ก่อนบันทึก ---
@@ -22,23 +24,26 @@ async def upload_csv(file: UploadFile = File(...), table_name: str = Form(...)):
             detail=f"File type not allowed. Accepted: {', '.join(ALLOWED_EXTENSIONS)}"
         )
 
-    temp_dir = "temp_uploads"
+    # --- ใช้ UUID ป้องกัน Path Traversal + ชื่อซ้ำ ---
+    temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "temp_uploads")
     os.makedirs(temp_dir, exist_ok=True)
-    file_path = os.path.join(temp_dir, file.filename)
+    safe_filename = f"{uuid.uuid4().hex}.csv"
+    file_path = os.path.join(temp_dir, safe_filename)
 
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
 
-    result = upload_csv_to_db(file_path, table_name)
+        result = upload_csv_to_db(file_path, table_name)
 
-    # ลบไฟล์ temp เสมอ
-    if os.path.exists(file_path):
-        os.remove(file_path)
+        if result["status"] == "error":
+            raise HTTPException(status_code=400, detail=result["message"])
 
-    if result["status"] == "error":
-        raise HTTPException(status_code=400, detail=result["message"])
-
-    return result
+        return result
+    finally:
+        # ลบไฟล์ temp เสมอ ไม่ว่าจะสำเร็จหรือ error
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
 
 @router.get("/schema")
