@@ -9,6 +9,33 @@ from app.db.database import engine
 MAX_FILE_SIZE_MB = 10
 ALLOWED_EXTENSIONS = {".csv"}
 
+# SQL Reserved Words ที่ห้ามใช้เป็นชื่อตาราง/คอลัมน์
+_SQL_RESERVED = {
+    "select", "insert", "update", "delete", "drop", "create", "alter",
+    "table", "from", "where", "and", "or", "not", "null", "index",
+    "pragma", "attach", "detach", "vacuum", "grant", "revoke",
+}
+
+
+def sanitize_identifier(name: str) -> str:
+    """
+    Sanitize SQL identifier (table name / column name) to prevent SQL Injection.
+    - ลบอักขระพิเศษทุกตัว เหลือเฉพาะ a-z, 0-9, underscore
+    - ถ้าขึ้นต้นด้วยตัวเลข จะเติม 'col_' นำหน้า
+    - ถ้าตรงกับ SQL Reserved Word จะเติม 'col_' นำหน้า
+    - ถ้าว่างเปล่า จะใช้ชื่อ 'unnamed'
+    """
+    clean = re.sub(r'[^a-zA-Z0-9_]', '_', name.strip()).lower()
+    # ลบ underscore ซ้ำ
+    clean = re.sub(r'_+', '_', clean).strip('_')
+    if not clean:
+        clean = "unnamed"
+    if clean[0].isdigit():
+        clean = f"col_{clean}"
+    if clean in _SQL_RESERVED:
+        clean = f"col_{clean}"
+    return clean
+
 
 def _detect_column_type(values: list) -> str:
     """
@@ -91,19 +118,35 @@ def upload_csv_to_db(file_path: str, table_name: str) -> dict:
                 "message": f"File too large. Max size: {MAX_FILE_SIZE_MB} MB"
             }
 
-        table_clean = table_name.strip().replace(" ", "_").lower()
+        table_clean = sanitize_identifier(table_name)
 
         # --- อ่าน CSV ---
         with open(file_path, mode="r", encoding="utf-8-sig") as f:
             reader = csv.reader(f)
-            headers = [h.strip().replace(" ", "_").lower() for h in next(reader)]
+            try:
+                raw_headers = next(reader)
+            except StopIteration:
+                return {"status": "error", "message": "CSV file is empty"}
             rows = list(reader)
 
-        if not headers:
+        if not raw_headers:
             return {"status": "error", "message": "CSV file has no headers"}
 
         if not rows:
             return {"status": "error", "message": "CSV file has no data rows"}
+
+        # --- Sanitize ชื่อคอลัมน์เพื่อป้องกัน SQL Injection ---
+        headers = []
+        seen = {}
+        for h in raw_headers:
+            clean = sanitize_identifier(h)
+            # จัดการชื่อคอลัมน์ซ้ำ: เติมเลขต่อท้าย
+            if clean in seen:
+                seen[clean] += 1
+                clean = f"{clean}_{seen[clean]}"
+            else:
+                seen[clean] = 0
+            headers.append(clean)
 
         # --- ตรวจจับชนิดข้อมูลอัตโนมัติ (Data Type Detection) ---
         col_types = {}

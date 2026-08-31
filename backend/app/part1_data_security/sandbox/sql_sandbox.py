@@ -21,11 +21,17 @@ def _sqlite_timeout_handler(conn, timeout_sec: int):
     ตั้ง progress_handler สำหรับ SQLite เพื่อตรวจสอบ Timeout
     SQLite จะเรียก progress_handler ทุก N instructions
     ถ้า handler คืนค่า non-zero จะยกเลิก Query ทันที
+    Returns: (timer, timeout_flag) — timeout_flag[0] = True เมื่อหมดเวลา
     """
     deadline = threading.Event()
+    timeout_flag = [False]  # ใช้ list เพื่อให้ mutable จาก closure
+
+    def on_timeout():
+        timeout_flag[0] = True
+        deadline.set()
 
     # ตั้งเวลาให้ deadline fire หลังจาก timeout_sec
-    timer = threading.Timer(timeout_sec, deadline.set)
+    timer = threading.Timer(timeout_sec, on_timeout)
     timer.daemon = True
     timer.start()
 
@@ -33,7 +39,7 @@ def _sqlite_timeout_handler(conn, timeout_sec: int):
     # เรียกทุก 1000 SQLite VM instructions
     raw_conn.set_progress_handler(lambda: 1 if deadline.is_set() else 0, 1000)
 
-    return timer
+    return timer, timeout_flag
 
 
 def _clear_timeout_handler(conn, timer):
@@ -52,27 +58,39 @@ def execute_sql_in_sandbox(sql_query: str, max_rows: int = MAX_ROWS, timeout_sec
     - บันทึก Audit Log ทุกครั้ง
     """
     timer = None
+    timeout_flag_ref = [False]
     try:
         with engine.connect() as conn:
-            # --- ตั้ง Timeout Handler ---
-            timer = _sqlite_timeout_handler(conn, timeout_sec)
+            try:
+                # --- บังคับ Read-Only ที่ระดับ SQLite Engine (Defense-in-Depth) ---
+                conn.execute(text("PRAGMA query_only = ON;"))
 
-            result = conn.execute(text(sql_query))
+                # --- ตั้ง Timeout Handler ---
+                timer, timeout_flag_ref = _sqlite_timeout_handler(conn, timeout_sec)
 
-            if result.returns_rows:
-                # --- จำกัดจำนวนแถว (Row Limit) ---
-                rows = result.fetchmany(max_rows + 1)
-                is_truncated = len(rows) > max_rows
-                if is_truncated:
-                    rows = rows[:max_rows]
-                data = [dict(row._mapping) for row in rows]
-            else:
-                data = []
-                is_truncated = False
+                result = conn.execute(text(sql_query))
 
-            # --- ล้าง Timeout Handler ---
-            _clear_timeout_handler(conn, timer)
-            timer = None
+                if result.returns_rows:
+                    # --- จำกัดจำนวนแถว (Row Limit) ---
+                    rows = result.fetchmany(max_rows + 1)
+                    is_truncated = len(rows) > max_rows
+                    if is_truncated:
+                        rows = rows[:max_rows]
+                    data = [dict(row._mapping) for row in rows]
+                else:
+                    data = []
+                    is_truncated = False
+
+                # --- ล้าง Timeout Handler ---
+                _clear_timeout_handler(conn, timer)
+                timer = None
+
+            finally:
+                # --- รีเซ็ต Read-Only เสมอ เพื่อคืน connection กลับ pool ในสถานะปกติ ---
+                try:
+                    conn.execute(text("PRAGMA query_only = OFF;"))
+                except Exception:
+                    pass  # ถ้ารีเซ็ตไม่ได้ ไม่ให้ crash ซ้อน
 
         # บันทึกประวัติสำเร็จ
         log_execution(sql_query, status="success", error_message=None)
@@ -88,8 +106,8 @@ def execute_sql_in_sandbox(sql_query: str, max_rows: int = MAX_ROWS, timeout_sec
     except Exception as e:
         error_msg = str(e)
 
-        # ตรวจจับว่าเป็น Timeout (SQLite interrupted)
-        if "interrupted" in error_msg.lower():
+        # ตรวจจับว่าเป็น Timeout ด้วย flag (ไม่ใช้ string matching)
+        if timeout_flag_ref[0]:
             error_msg = f"Query timeout: exceeded {timeout_sec} seconds limit"
 
         # บันทึกประวัติข้อผิดพลาด
