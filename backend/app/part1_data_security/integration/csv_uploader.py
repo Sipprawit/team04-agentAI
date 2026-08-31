@@ -9,6 +9,10 @@ from app.db.database import engine
 MAX_FILE_SIZE_MB = 10
 ALLOWED_EXTENSIONS = {".csv"}
 
+# รายการ Encoding ที่รองรับ (เรียงตามลำดับความน่าจะเป็น)
+# cp874 และ tis-620 เป็น Encoding ภาษาไทยที่ Microsoft Excel บน Windows ใช้เป็นค่าเริ่มต้น
+ENCODINGS_TO_TRY = ["utf-8-sig", "cp874", "tis-620", "utf-8", "windows-1252", "latin-1"]
+
 # SQL Reserved Words ที่ห้ามใช้เป็นชื่อตาราง/คอลัมน์
 _SQL_RESERVED = {
     "select", "insert", "update", "delete", "drop", "create", "alter",
@@ -20,12 +24,13 @@ _SQL_RESERVED = {
 def sanitize_identifier(name: str) -> str:
     """
     Sanitize SQL identifier (table name / column name) to prevent SQL Injection.
-    - ลบอักขระพิเศษทุกตัว เหลือเฉพาะ a-z, 0-9, underscore
+    - รองรับทั้งตัวอักษรภาษาไทย (\u0E00-\u0E7F) และภาษาอังกฤษ (a-z, A-Z), ตัวเลข (0-9) และ underscore
+    - ลบอักขระพิเศษอันตราย เช่น ;, ', ", --, /*, (), =, <, > ออกทั้งหมด
     - ถ้าขึ้นต้นด้วยตัวเลข จะเติม 'col_' นำหน้า
     - ถ้าตรงกับ SQL Reserved Word จะเติม 'col_' นำหน้า
     - ถ้าว่างเปล่า จะใช้ชื่อ 'unnamed'
     """
-    clean = re.sub(r'[^a-zA-Z0-9_]', '_', name.strip()).lower()
+    clean = re.sub(r'[^\w\u0E00-\u0E7F]', '_', name.strip()).lower()
     # ลบ underscore ซ้ำ
     clean = re.sub(r'_+', '_', clean).strip('_')
     if not clean:
@@ -35,6 +40,32 @@ def sanitize_identifier(name: str) -> str:
     if clean in _SQL_RESERVED:
         clean = f"col_{clean}"
     return clean
+
+
+def _read_csv_with_fallback(file_path: str):
+    """
+    อ่านไฟล์ CSV โดยพยายามใช้ Encoding ต่างๆ (UTF-8, CP874 สำหรับภาษาไทยจาก Excel, TIS-620, Windows-1252)
+    ป้องกัน UnicodeDecodeError เมื่อผู้ใช้อัปโหลดไฟล์ที่บันทึกจาก Excel บน Windows
+    """
+    last_error = None
+    for enc in ENCODINGS_TO_TRY:
+        try:
+            with open(file_path, mode="r", encoding=enc, newline="") as f:
+                reader = csv.reader(f)
+                try:
+                    raw_headers = next(reader)
+                except StopIteration:
+                    return [], [], enc
+                rows = list(reader)
+                return raw_headers, rows, enc
+        except (UnicodeDecodeError, UnicodeError) as e:
+            last_error = e
+            continue
+        except Exception as e:
+            last_error = e
+            break
+
+    raise ValueError(f"ไม่สามารถถอดรหัสตัวอักษรของไฟล์ CSV ได้ (สาเหตุ: {last_error}) กรุณาบันทึกเป็น UTF-8 หรือ Windows Thai (CP874)")
 
 
 def _detect_column_type(values: list) -> str:
@@ -51,7 +82,7 @@ def _detect_column_type(values: list) -> str:
     is_int = True
     for s in samples:
         try:
-            int(s)
+            int(s.replace(",", ""))  # รองรับตัวเลขที่มีจุลภาค เช่น 1,000
         except ValueError:
             is_int = False
             break
@@ -62,7 +93,7 @@ def _detect_column_type(values: list) -> str:
     is_float = True
     for s in samples:
         try:
-            float(s)
+            float(s.replace(",", ""))
         except ValueError:
             is_float = False
             break
@@ -98,8 +129,9 @@ def validate_file_size(file_path: str) -> bool:
 def upload_csv_to_db(file_path: str, table_name: str) -> dict:
     """
     ระบบการนำเข้าข้อมูลและจัดการโครงสร้าง (Data Integration & Schema Mapping System)
-    - อ่านไฟล์ CSV ด้วย Python Standard CSV Library
+    - อ่านไฟล์ CSV ด้วย Auto-Encoding Detection (รองรับทั้ง UTF-8 และ CP874 / TIS-620 ภาษาไทย)
     - ตรวจจับชนิดข้อมูลอัตโนมัติ (INTEGER, REAL, DATE, TEXT)
+    - ป้องกัน SQL Injection ด้วยการ Sanitize ชื่อตารางและชื่อคอลัมน์ (รองรับภาษาไทย)
     - ตรวจสอบนามสกุลไฟล์และขนาดไฟล์
     - นำเข้าตารางในฐานข้อมูล SQLite
     """
@@ -120,14 +152,14 @@ def upload_csv_to_db(file_path: str, table_name: str) -> dict:
 
         table_clean = sanitize_identifier(table_name)
 
-        # --- อ่าน CSV ---
-        with open(file_path, mode="r", encoding="utf-8-sig") as f:
-            reader = csv.reader(f)
-            try:
-                raw_headers = next(reader)
-            except StopIteration:
-                return {"status": "error", "message": "CSV file is empty"}
-            rows = list(reader)
+        # --- อ่าน CSV พร้อม Fallback Encoding อัตโนมัติ ---
+        try:
+            raw_headers, rows, used_encoding = _read_csv_with_fallback(file_path)
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": str(e)
+            }
 
         if not raw_headers:
             return {"status": "error", "message": "CSV file has no headers"}
@@ -154,15 +186,18 @@ def upload_csv_to_db(file_path: str, table_name: str) -> dict:
             col_values = [row[col_idx] for row in rows if col_idx < len(row)]
             col_types[col_name] = _detect_column_type(col_values)
 
-        col_defs = ", ".join([f"{col} {col_types[col]}" for col in headers])
-        create_sql = f"CREATE TABLE IF NOT EXISTS {table_clean} ({col_defs});"
+        col_defs = ", ".join([f'"{col}" {col_types[col]}' for col in headers])
+        drop_sql = f'DROP TABLE IF EXISTS "{table_clean}";'
+        create_sql = f'CREATE TABLE "{table_clean}" ({col_defs});'
 
-        placeholders = ", ".join([f":{col}" for col in headers])
-        insert_sql = f"INSERT INTO {table_clean} ({', '.join(headers)}) VALUES ({placeholders});"
+        quoted_headers = [f'"{col}"' for col in headers]
+        placeholders = ", ".join([f":param_{i}" for i in range(len(headers))])
+        insert_sql = f'INSERT INTO "{table_clean}" ({", ".join(quoted_headers)}) VALUES ({placeholders});'
 
         # --- นำเข้าฐานข้อมูล ---
         inserted_count = 0
         with engine.connect() as conn:
+            conn.execute(text(drop_sql))
             conn.execute(text(create_sql))
             for row in rows:
                 if len(row) == len(headers):
@@ -171,17 +206,19 @@ def upload_csv_to_db(file_path: str, table_name: str) -> dict:
                         val = row[i].strip() if row[i] else None
                         # แปลงค่าตามชนิดที่ตรวจจับได้
                         if val is not None and val != "":
+                            # ลบคอมม่าออกจากตัวเลข
+                            clean_num = val.replace(",", "")
                             if col_types[col] == "INTEGER":
                                 try:
-                                    val = int(val)
+                                    val = int(clean_num)
                                 except ValueError:
                                     pass
                             elif col_types[col] == "REAL":
                                 try:
-                                    val = float(val)
+                                    val = float(clean_num)
                                 except ValueError:
                                     pass
-                        row_dict[col] = val
+                        row_dict[f"param_{i}"] = val
                     conn.execute(text(insert_sql), row_dict)
                     inserted_count += 1
             conn.commit()
@@ -192,6 +229,7 @@ def upload_csv_to_db(file_path: str, table_name: str) -> dict:
             "row_count": inserted_count,
             "columns": headers,
             "detected_types": col_types,
+            "encoding": used_encoding,
         }
     except Exception as e:
         return {
