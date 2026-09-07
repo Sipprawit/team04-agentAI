@@ -92,6 +92,45 @@ def _generate_follow_up_questions(user_query: str, sql_query: str, raw_data: lis
     return clean_follow_ups
 
 
+def _create_out_of_scope_response(query: str) -> dict:
+    """
+    สร้างคำตอบปฏิเสธอย่างสุภาพเมื่อเจอคำถามนอกขอบเขตข้อมูล (Out-of-Scope Guardrails & Zero Hallucination)
+    ระบุบทบาทของระบบ พร้อมแนะนำ Guided Prompts ที่ระบบตอบได้จริง
+    """
+    uploaded = get_uploaded_tables()
+    if uploaded:
+        tbl = uploaded[0]
+        guides = [
+            f"แสดงข้อมูลทั้งหมดในตาราง {tbl}",
+            f"สรุปภาพรวมและสถิติสำคัญในตาราง {tbl}",
+            f"ค้นหา 5 อันดับแรกในตาราง {tbl}",
+        ]
+        scope_desc = f"วิเคราะห์ข้อมูลเชิงลึกจากชุดข้อมูลที่คุณนำเข้า (เช่น ตาราง `{tbl}`)"
+    else:
+        guides = [
+            "สรุปภาพรวมยอดขายและสินค้าตัวอย่าง",
+            "แสดงสินค้า 5 อันดับแรกที่มีราคาสูงสุด",
+            "แจกแจงจำนวนคำสั่งซื้อแยกตามลูกค้า",
+        ]
+        scope_desc = "วิเคราะห์ข้อมูลเชิงธุรกิจ ยอดขาย และชุดข้อมูลจากไฟล์ CSV ที่คุณนำเข้า"
+
+    guide_bullets = "\n".join(f"- *\"{g}\"*" for g in guides)
+    response_text = (
+        f"ขออภัยครับ ระบบนี้ออกแบบมาเพื่อ{scope_desc}เท่านั้น ไม่สามารถตอบคำถามทั่วไปในหัวข้ออื่นได้ครับ\n\n"
+        f"💡 **คุณสามารถลองถามเกี่ยวกับข้อมูลที่ระบบรองรับได้นะครับ เช่น:**\n"
+        f"{guide_bullets}\n\n"
+        f"*(หรือคลิกปุ่ม **`+`** ด้านล่างเพื่อนำเข้าไฟล์ CSV ของคุณสำหรับการวิเคราะห์)*"
+    )
+    return {
+        "query": query,
+        "sql": "",
+        "response": response_text,
+        "visualization": None,
+        "data": [],
+        "follow_up_questions": guides,
+    }
+
+
 def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
     """
     ฟังก์ชันแกนกลางประมวลผล Pipeline:
@@ -146,6 +185,17 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
                 ],
             }
 
+    # ตรวจจับคำถามนอกขอบเขตข้อมูลโดยสิ้นเชิง (Fast-path Out-of-Scope Guardrails)
+    out_of_scope_patterns = [
+        "อากาศ", "พยากรณ์อากาศ", "ฝนตก", "อุณหภูมิ",
+        "สูตรทำ", "สูตรอาหาร", "ทำอาหาร", "ผัดกะเพรา", "ต้มยำ", "วิธีทำอาหาร",
+        "แต่งกลอน", "บทกวี", "เล่าเรื่อง", "นิทาน", "มุกตลก",
+        "นายกรัฐมนตรี", "การเมือง", "เลือกตั้ง", "ดูดวง", "ราศี",
+        "ผลบอล", "ฟุตบอล", "ดารา", "ร้องเพลง", "เนื้อเพลง"
+    ]
+    if any(p in user_query.lower() for p in out_of_scope_patterns):
+        return _create_out_of_scope_response(user_query)
+
     # 1. แปลงคำถามเป็น SQL (Part 2)
     try:
         sql_query = translate_nl_to_sql(user_query, history)
@@ -159,6 +209,10 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
             "data": [],
             "follow_up_questions": ["แสดงรายชื่อสินค้าทั้งหมด", "สรุปยอดขายรวมของสินค้าแต่ละชิ้น"],
         }
+
+    # กรณี AI ส่งสัญญาณว่าคำถามอยู่นอกขอบเขต (Zero Hallucination) หรือไม่ได้สร้างคำสั่ง SQL
+    if sql_query.startswith("[OUT_OF_SCOPE]") or (not sql_query.upper().startswith("SELECT") and not sql_query.upper().startswith("WITH")):
+        return _create_out_of_scope_response(user_query)
 
     schema_info = get_database_schema_info()
     max_retries = 2

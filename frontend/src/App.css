@@ -621,6 +621,33 @@ body {
   box-shadow: var(--card-shadow-hover);
 }
 
+/* Interactive Click-to-Inspect Message Styles */
+.clickable-ai-msg {
+  cursor: pointer;
+}
+
+.clickable-ai-msg .ai-card {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border-left: 3px solid transparent;
+}
+
+.clickable-ai-msg:hover .ai-card {
+  border-left-color: var(--primary-500);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.12);
+  transform: translateY(-1px);
+}
+
+.active-inspected-msg .ai-card {
+  border-left: 3px solid var(--primary-600) !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2), 0 4px 12px rgba(37, 99, 235, 0.15) !important;
+  background-color: #fcfdff;
+}
+
+.active-inspected-msg .ai-av {
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
 .error-card {
   border-color: #fecaca;
   background-color: #fff5f5;

@@ -48,3 +48,12 @@ class TestNLTranslator:
         with pytest.raises(RuntimeError) as exc_info:
             translate_nl_to_sql("แสดงสินค้าทั้งหมด")
         assert "ไม่สามารถแปลงคำถามเป็น SQL ผ่าน AI ได้" in str(exc_info.value)
+
+    def test_clean_extracted_sql_out_of_scope(self):
+        raw = "[OUT_OF_SCOPE] คำถามนี้อยู่นอกเหนือขอบเขตข้อมูล"
+        assert clean_extracted_sql(raw) == "[OUT_OF_SCOPE]"
+
+    def test_clean_extracted_sql_refusal(self):
+        raw = "ขออภัยครับ ระบบไม่สามารถตอบคำถามเกี่ยวกับสภาพอากาศได้"
+        assert clean_extracted_sql(raw) == "[OUT_OF_SCOPE]"
+

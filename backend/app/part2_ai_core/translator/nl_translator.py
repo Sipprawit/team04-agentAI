@@ -15,6 +15,9 @@ def clean_extracted_sql(text_input: str) -> str:
     if not text_input:
         return ""
 
+    if "[OUT_OF_SCOPE]" in text_input:
+        return "[OUT_OF_SCOPE]"
+
     # ลบ <think>...</think> tags
     if "</think>" in text_input:
         text_input = text_input.split("</think>")[-1]
@@ -65,9 +68,13 @@ def clean_extracted_sql(text_input: str) -> str:
 
     # 3. ดึง SELECT ใดๆ (เช่น SELECT 1 หรือ scalar queries)
     if cleaned.upper().startswith("SELECT"):
-        # ตัดคำอธิบายหลัง semicolon
         first_stmt = cleaned.split(";")[0].strip()
         return first_stmt + ";"
+
+    # 4. หากไม่มีคำสั่ง SQL ใดๆ และเป็นการปฏิเสธ ให้ถือเป็น OUT_OF_SCOPE
+    refusal_keywords = ["ขออภัย", "ไม่สามารถ", "ไม่มีข้อมูล", "อยู่นอกเหนือ", "out of scope", "cannot", "sorry"]
+    if any(rk in cleaned.lower() for rk in refusal_keywords):
+        return "[OUT_OF_SCOPE]"
 
     return cleaned.strip()
 

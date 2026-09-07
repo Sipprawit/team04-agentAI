@@ -9,7 +9,6 @@ import {
   Pin,
   AlertCircle,
   RefreshCw,
-  PanelLeftOpen,
   BarChart3,
   Table as TableIcon,
   CheckCircle2,
@@ -274,27 +273,41 @@ export default function App() {
     try {
       const historyData = await getChatHistory(sessionId);
       if (historyData?.messages && historyData.messages.length > 0) {
-        const loadedMessages = historyData.messages.map(m => ({
-          id: `db_${m.id}`,
-          role: m.role,
-          text: m.content,
-          sql: m.metadata?.sql || null,
-          visualization: m.metadata?.visualization || null,
-          rawData: m.metadata?.rawData || [],
-          followUpQuestions: m.metadata?.followUpQuestions || [],
-          userQuery: m.metadata?.userQuery || null,
-          timestamp: m.created_at ? new Date(m.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : 'ล่าสุด'
-        }));
+        const loadedMessages = historyData.messages.map(m => {
+          const isAi = m.role === 'assistant' || m.role === 'ai';
+          return {
+            id: `db_${m.id}`,
+            role: isAi ? 'ai' : m.role,
+            text: m.content,
+            isUploadNotice: !!m.metadata?.uploadData,
+            uploadData: m.metadata?.uploadData || null,
+            sql: m.metadata?.sql || null,
+            visualization: m.metadata?.visualization || null,
+            rawData: m.metadata?.rawData || [],
+            followUpQuestions: m.metadata?.followUpQuestions || [],
+            userQuery: m.metadata?.userQuery || null,
+            timestamp: m.created_at ? new Date(m.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : 'ล่าสุด'
+          };
+        });
         setMessagesBySession(prev => ({
           ...prev,
           [sessionId]: loadedMessages
         }));
 
-        // อัปเดต activeMessage ให้ตรงกับข้อความล่าสุดของห้องนี้
+        // อัปเดต activeMessage ให้ตรงกับข้อความ AI ล่าสุดของห้องนี้
         const lastAi = [...loadedMessages].reverse().find(
-          msg => msg.role === 'ai' && ((msg.visualization && msg.visualization.recommended_chart !== 'none') || (msg.rawData && msg.rawData.length > 0))
+          msg => msg.role === 'ai' && ((msg.visualization && msg.visualization.recommended_chart !== 'none') || (msg.rawData && msg.rawData.length > 0) || msg.sql)
         );
-        setActiveMessage(lastAi || null);
+        if (lastAi) {
+          setActiveMessage(lastAi);
+          if (lastAi.visualization && lastAi.visualization.recommended_chart !== 'none') {
+            setAnalyticsTab('insights');
+          } else if (lastAi.rawData && lastAi.rawData.length > 0) {
+            setAnalyticsTab('table');
+          }
+        } else {
+          setActiveMessage(null);
+        }
       }
     } catch (_err) {}
   }, []);
@@ -304,9 +317,18 @@ export default function App() {
     setActiveSession(sessionId);
     const sessionMsgs = messagesBySession[sessionId] || [];
     const lastAi = [...sessionMsgs].reverse().find(
-      msg => msg.role === 'ai' && ((msg.visualization && msg.visualization.recommended_chart !== 'none') || (msg.rawData && msg.rawData.length > 0))
+      msg => msg.role === 'ai' && ((msg.visualization && msg.visualization.recommended_chart !== 'none') || (msg.rawData && msg.rawData.length > 0) || msg.sql)
     );
-    setActiveMessage(lastAi || null);
+    if (lastAi) {
+      setActiveMessage(lastAi);
+      if (lastAi.visualization && lastAi.visualization.recommended_chart !== 'none') {
+        setAnalyticsTab('insights');
+      } else if (lastAi.rawData && lastAi.rawData.length > 0) {
+        setAnalyticsTab('table');
+      }
+    } else {
+      setActiveMessage(null);
+    }
     fetchSessionHistory(sessionId);
   };
 
@@ -469,6 +491,21 @@ export default function App() {
       return;
     }
     handleSendMessage(null, sq);
+  };
+
+  // คลิกเลือกข้อความ AI เพื่อเรียกดูข้อมูล กราฟ และตารางย้อนหลังในแผงวิเคราะห์
+  const handleSelectMessage = (msg) => {
+    if (!msg || msg.role !== 'ai') return;
+    if (!msg.visualization && (!msg.rawData || msg.rawData.length === 0) && !msg.sql) return;
+
+    setActiveMessage(msg);
+    setIsRightPanelOpen(true);
+
+    if (msg.visualization && msg.visualization.recommended_chart && msg.visualization.recommended_chart !== 'none') {
+      setAnalyticsTab('insights');
+    } else if (msg.rawData && msg.rawData.length > 0) {
+      setAnalyticsTab('table');
+    }
   };
 
   // Pin / Unpin Dashboard
@@ -677,15 +714,6 @@ export default function App() {
         {/* Top Navbar */}
         <header className="workspace-navbar">
           <div className="navbar-left">
-            {!isLeftSidebarOpen && (
-              <button
-                onClick={() => setIsLeftSidebarOpen(true)}
-                className="nav-icon-btn"
-                title="เปิดแถบประวัติการสนทนา"
-              >
-                <PanelLeftOpen size={17} />
-              </button>
-            )}
             <div className="session-title-tag">
               <Database size={15} className="text-blue-600" />
               <h2>{sessions.find(s => s.id === activeSession)?.title || 'การวิเคราะห์ข้อมูล'}</h2>
@@ -717,12 +745,22 @@ export default function App() {
             style={isRightPanelOpen ? { flex: 1, width: 'auto' } : { width: '100%' }}
           >
             <div className="chat-messages-scroll">
-              {currentMessages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`message-item-wrapper ${msg.role === 'user' ? 'user-align' : 'ai-align'}`}
-                  onClick={() => msg.role === 'ai' && (msg.visualization || msg.rawData?.length > 0) && setActiveMessage(msg)}
-                >
+              {currentMessages.map((msg) => {
+                const isAiWithData = msg.role === 'ai' && (msg.visualization || (msg.rawData && msg.rawData.length > 0) || msg.sql);
+                const isCurrentlyActive = activeMessage?.id === msg.id;
+                return (
+                  <div
+                    key={msg.id}
+                    className={`message-item-wrapper ${msg.role === 'user' ? 'user-align' : 'ai-align'} ${
+                      isAiWithData ? 'clickable-ai-msg' : ''
+                    } ${isCurrentlyActive ? 'active-inspected-msg' : ''}`}
+                    onClick={() => handleSelectMessage(msg)}
+                    title={
+                      isAiWithData
+                        ? 'คลิกเพื่อเรียกดูแผนภูมิ ตารางข้อมูล และคำสั่ง SQL ในแผงรายงานวิเคราะห์'
+                        : undefined
+                    }
+                  >
                   <div className={`message-avatar ${msg.role === 'user' ? 'user-av' : 'ai-av'}`}>
                     {msg.role === 'user' ? <User size={15} /> : <Bot size={15} />}
                   </div>
@@ -859,7 +897,8 @@ export default function App() {
                     )}
                   </div>
                 </div>
-              ))}
+              );
+            })}
 
               {/* Instant Feedback Loading Animation */}
               {isLoading && (
