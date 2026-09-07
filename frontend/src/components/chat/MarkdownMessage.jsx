@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Copy, Check } from 'lucide-react';
 
-export default function MarkdownMessage({ content }) {
+export default function MarkdownMessage({ content, allowCopy = true }) {
   const [copied, setCopied] = useState(false);
 
   if (!content) return null;
@@ -51,17 +51,19 @@ export default function MarkdownMessage({ content }) {
         {content}
       </ReactMarkdown>
       </div>
-      <div className="markdown-actions">
-        <button
-          type="button"
-          className={`markdown-copy-btn ${copied ? 'copied' : ''}`}
-          onClick={handleCopy}
-          title={copied ? 'คัดลอกเรียบร้อยแล้ว' : 'คัดลอกข้อความสรุป'}
-        >
-          {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
-          <span>{copied ? 'คัดลอกแล้ว' : 'คัดลอก'}</span>
-        </button>
-      </div>
+      {allowCopy && (
+        <div className="markdown-actions">
+          <button
+            type="button"
+            className={`markdown-copy-btn ${copied ? 'copied' : ''}`}
+            onClick={handleCopy}
+            title={copied ? 'คัดลอกเรียบร้อยแล้ว' : 'คัดลอกข้อความสรุป'}
+          >
+            {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+            <span>{copied ? 'คัดลอกแล้ว' : 'คัดลอก'}</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

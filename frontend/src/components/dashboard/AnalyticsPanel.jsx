@@ -18,8 +18,15 @@ export default function AnalyticsPanel({
   onPinItem,
   onUnpinItem,
   onClose,
+  activeTab: controlledTab,
+  onTabChange,
 }) {
-  const [activeTab, setActiveTab] = useState('insights'); // 'insights' | 'table' | 'pinned'
+  const [internalTab, setInternalTab] = useState('insights'); // 'insights' | 'table' | 'pinned'
+  const activeTab = controlledTab !== undefined ? controlledTab : internalTab;
+  const setActiveTab = (tab) => {
+    if (onTabChange) onTabChange(tab);
+    setInternalTab(tab);
+  };
 
   const hasVisualization = activeMessage?.visualization && activeMessage.visualization.recommended_chart !== 'none';
   const hasRawData = activeMessage?.rawData && activeMessage.rawData.length > 0;
@@ -154,10 +161,6 @@ export default function AnalyticsPanel({
                   <h4>ผลการสืบค้นข้อมูล</h4>
                   <p className="info-card-desc">ชุดข้อมูลนี้แสดงผลได้เหมาะสมที่สุดในรูปแบบตาราง ท่านสามารถเปิดดูและส่งออกเป็นไฟล์สเปรดชีตได้</p>
                   <div className="info-card-actions">
-                    <button className="view-table-trigger-btn" onClick={() => setActiveTab('table')}>
-                      <TableIcon size={14} />
-                      <span>เปิดดูตารางข้อมูล ({activeMessage.rawData.length} รายการ)</span>
-                    </button>
                     <button
                       className="export-table-trigger-btn"
                       onClick={() => handleExportCsv(activeMessage.rawData, "query_result")}

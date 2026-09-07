@@ -158,6 +158,7 @@ export default function App() {
   const [errorBanner, setErrorBanner] = useState(null);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [activeMessage, setActiveMessage] = useState(null);
+  const [analyticsTab, setAnalyticsTab] = useState('insights'); // 'insights' | 'table' | 'pinned'
   const [suggestedQueries, setSuggestedQueries] = useState(DEFAULT_SUGGESTED_QUERIES);
 
   const messagesEndRef = useRef(null);
@@ -391,6 +392,7 @@ export default function App() {
 
       setActiveMessage(aiMessage);
       if (aiMessage.visualization && aiMessage.visualization.recommended_chart !== 'none') {
+        setAnalyticsTab('insights');
         setIsRightPanelOpen(true);
       }
     } catch (error) {
@@ -566,6 +568,7 @@ export default function App() {
     }).catch(() => {});
 
     setActiveMessage(uploadAiMsg);
+    setAnalyticsTab('table');
     setIsRightPanelOpen(true);
 
     // อัปเดตคำถามแนะนำด้านล่างให้ตรงกับตารางและคอลัมน์ที่เพิ่งอัปโหลด
@@ -730,6 +733,7 @@ export default function App() {
                             onClick={(e) => {
                               e.stopPropagation();
                               setActiveMessage(msg);
+                              setAnalyticsTab('table');
                               setIsRightPanelOpen(true);
                             }}
                           >
@@ -740,9 +744,9 @@ export default function App() {
                         </div>
                       </div>
                     ) : (
-                      /* Standard Markdown Rendered Content */
+                      /* Standard Markdown Rendered Content (ปุ่มคัดลอกเฉพาะข้อความของ AI เท่านั้น) */
                       <div className="message-card-body">
-                        <MarkdownMessage content={msg.text} />
+                        <MarkdownMessage content={msg.text} allowCopy={msg.role === 'ai'} />
                       </div>
                     )}
 
@@ -757,14 +761,24 @@ export default function App() {
                       </details>
                     )}
 
-                    {/* Action Bar: Export CSV & Pin to Dashboard */}
+                    {/* Action Bar: View Table, Export CSV & Pin to Dashboard */}
                     {msg.role === 'ai' && !msg.isError && !msg.isUploadNotice && (msg.sql || msg.visualization || msg.rawData?.length > 0) && (
                       <div className="message-actions-bar">
-                        {msg.visualization && msg.visualization.recommended_chart !== 'none' && (
-                          <span className="badge-has-chart">
-                            <BarChart3 size={12} />
-                            <span>แผนภูมิประกอบ</span>
-                          </span>
+                        {/* Direct Table View Button from Chat Message */}
+                        {msg.rawData && msg.rawData.length > 0 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMessage(msg);
+                              setAnalyticsTab('table');
+                              setIsRightPanelOpen(true);
+                            }}
+                            className="view-msg-table-btn"
+                            title="เปิดดูตารางข้อมูลในแผงด้านข้าง"
+                          >
+                            <TableIcon size={12} />
+                            <span>ดูตารางข้อมูล ({msg.rawData.length.toLocaleString()} รายการ)</span>
+                          </button>
                         )}
 
                         {/* Direct CSV Export from Chat Message */}
@@ -793,32 +807,6 @@ export default function App() {
                           <Pin size={12} />
                           <span>ปักหมุดรายงาน</span>
                         </button>
-                      </div>
-                    )}
-
-                    {/* Smart Follow-up Questions (Drill-down Queries) */}
-                    {msg.role === 'ai' && msg.followUpQuestions && msg.followUpQuestions.length > 0 && (
-                      <div className="followup-questions-box">
-                        <div className="followup-title">
-                          <Sparkles size={12} className="text-blue-600" />
-                          <span>คำถามวิเคราะห์ต่อเนื่อง:</span>
-                        </div>
-                        <div className="followup-chips-list">
-                          {msg.followUpQuestions.map((fq, fIdx) => (
-                            <button
-                              key={fIdx}
-                              className="followup-chip-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSendMessage(null, fq);
-                              }}
-                              disabled={isLoading}
-                            >
-                              <span>{fq}</span>
-                              <ArrowRight size={11} />
-                            </button>
-                          ))}
-                        </div>
                       </div>
                     )}
                   </div>
@@ -934,6 +922,8 @@ export default function App() {
                 onPinItem={handlePinItem}
                 onUnpinItem={handleUnpinItem}
                 onClose={() => setIsRightPanelOpen(false)}
+                activeTab={analyticsTab}
+                onTabChange={setAnalyticsTab}
               />
             </section>
           )}
