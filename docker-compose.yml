@@ -1,0 +1,47 @@
+services:
+  # ==========================================
+  # 1. Backend Service (FastAPI + AI Core)
+  # ==========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: team04-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - LLM_MODEL_NAME=${LLM_MODEL_NAME:-openai/gpt-oss-20b}
+    volumes:
+      # Mount โฟลเดอร์เพื่อเก็บฐานข้อมูล SQLite test.db ไม่ให้ข้อมูลแชทหายเมื่อรีสตาร์ต container
+      - sqlite_data:/app
+    networks:
+      - team04-network
+
+  # ==========================================
+  # 2. Frontend Service (React UI + Nginx Proxy)
+  # ==========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=
+    container_name: team04-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - team04-network
+
+volumes:
+  sqlite_data:
+    name: team04_sqlite_data
+
+networks:
+  team04-network:
+    name: team04_network
+    driver: bridge
