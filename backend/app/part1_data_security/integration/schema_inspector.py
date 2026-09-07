@@ -5,6 +5,18 @@ EXCLUDED_TABLES = {"audit_logs", "sqlite_sequence", "chat_sessions", "chat_messa
 MOCK_TABLES = {"customers", "products", "orders"}
 
 
+def get_uploaded_tables() -> list:
+    """
+    ดึงรายชื่อตารางที่ผู้ใช้อัปโหลดเข้ามาจริง (ไม่รวมตารางระบบและตาราง mock data)
+    """
+    try:
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        return [t for t in tables if t not in EXCLUDED_TABLES and t not in MOCK_TABLES]
+    except Exception:
+        return []
+
+
 def get_database_schema_info(exclude_system_tables: bool = True) -> str:
     """
     อ่านและบันทึกโครงสร้างข้อมูล (Schema Mapping System)
@@ -106,6 +118,8 @@ def get_schema_dict() -> dict:
                     "foreign_keys": fks,
                     "row_count": row_count,
                     "is_system": table_name in EXCLUDED_TABLES,
+                    "is_mock": table_name in MOCK_TABLES,
+                    "is_uploaded": (table_name not in EXCLUDED_TABLES and table_name not in MOCK_TABLES),
                 }
         return result
     except Exception as e:

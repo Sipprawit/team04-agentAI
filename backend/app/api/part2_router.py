@@ -11,7 +11,7 @@ from app.part2_ai_core.validator.self_corrector import self_heal_sql
 
 # --- Imports Part 1 (Data & Security) ---
 from app.part1_data_security.sandbox.sql_sandbox import execute_sql_in_sandbox
-from app.part1_data_security.integration.schema_inspector import get_database_schema_info
+from app.part1_data_security.integration.schema_inspector import get_database_schema_info, get_uploaded_tables
 
 # --- Imports Part 3 (Analytics & Insights) ---
 from app.part3_analytics_insights.insights.executive_summarizer import generate_executive_insight
@@ -125,6 +125,27 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
             "follow_up_questions": ["แสดงรายชื่อสินค้าทั้งหมด", "แสดงรายการคำสั่งซื้อล่าสุด"],
         }
 
+    # ตรวจสอบเจตนา: หากผู้ใช้เจาะจงถามถึง "ชุดข้อมูลที่อัปโหลด" แต่ยังไม่มีตารางที่อัปโหลดเลย
+    upload_intent_keywords = ["ที่อัปโหลด", "ไฟล์ที่อัปโหลด", "ชุดข้อมูลที่อัปโหลด", "ตารางที่อัปโหลด", "ไฟล์ csv"]
+    if any(kw in user_query.lower() for kw in upload_intent_keywords):
+        uploaded_tables = get_uploaded_tables()
+        if not uploaded_tables:
+            return {
+                "query": user_query,
+                "sql": "",
+                "response": (
+                    "ขณะนี้ยังไม่มีชุดข้อมูลที่ถูกอัปโหลดเข้ามาในระบบครับ\n\n"
+                    "💡 **คำแนะนำ**: ท่านสามารถคลิกปุ่ม **`+`** ด้านล่างกล่องข้อความเพื่อนำเข้าไฟล์ CSV ของคุณ "
+                    "หรือหากต้องการทดสอบระบบ สามารถสอบถามชุดข้อมูลจำลอง (Mock Data: สินค้า, ลูกค้า, คำสั่งซื้อ) ได้ทันทีครับ"
+                ),
+                "visualization": None,
+                "data": [],
+                "follow_up_questions": [
+                    "สรุปภาพรวมยอดขายและสินค้าตัวอย่าง",
+                    "แสดงสินค้า 5 อันดับแรกที่มีราคาสูงสุด",
+                ],
+            }
+
     # 1. แปลงคำถามเป็น SQL (Part 2)
     try:
         sql_query = translate_nl_to_sql(user_query, history)
@@ -181,6 +202,13 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
         else:
             break
 
+    uploaded_tables = get_uploaded_tables()
+    default_fallbacks = (
+        [f"แสดงข้อมูลทั้งหมดในตาราง {uploaded_tables[0]}", f"สรุปภาพรวมในตาราง {uploaded_tables[0]}"]
+        if uploaded_tables
+        else ["สรุปภาพรวมยอดขายและสินค้าตัวอย่าง", "แสดงสินค้า 5 อันดับแรกที่มีราคาสูงสุด"]
+    )
+
     if not sandbox_result or sandbox_result.get("status") != "success":
         return {
             "query": user_query,
@@ -188,7 +216,7 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
             "response": f"ขออภัยครับ ไม่สามารถดึงข้อมูลได้: {last_error}",
             "visualization": None,
             "data": [],
-            "follow_up_questions": ["แสดงรายชื่อสินค้าทั้งหมด"],
+            "follow_up_questions": default_fallbacks[:2],
         }
 
     raw_data = sandbox_result.get("data", [])
@@ -199,7 +227,7 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
             "response": "ประมวลผลคำสั่งสำเร็จ แต่ไม่พบข้อมูลที่ตรงกับเงื่อนไขในฐานข้อมูล",
             "visualization": None,
             "data": [],
-            "follow_up_questions": ["แสดงรายชื่อสินค้าทั้งหมด", "ลูกค้า 5 อันดับแรกที่มียอดสั่งซื้อสูงสุด"],
+            "follow_up_questions": default_fallbacks,
         }
 
     # 5. สรุป Insight ภาษาไทยสำหรับผู้บริหาร (Part 3)

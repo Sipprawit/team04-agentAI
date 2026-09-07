@@ -24,7 +24,8 @@ import {
   createSession,
   deleteSession,
   getChatHistory,
-  saveChatMessage
+  saveChatMessage,
+  fetchSchemaDict
 } from './services/chatService';
 import { pinItemToDashboard, unpinItem } from './services/dashboardService';
 import ChatHistorySidebar from './components/chat/ChatHistorySidebar';
@@ -40,10 +41,10 @@ const LOCAL_STORAGE_PINNED_KEY = 'team04_pinned_dashboard_v4';
 const LOCAL_STORAGE_PANEL_WIDTH_KEY = 'team04_analytics_panel_width_v4';
 
 const DEFAULT_SUGGESTED_QUERIES = [
-  'แสดงข้อมูลทั้งหมดในชุดข้อมูลที่อัปโหลด',
-  'แจกแจงจำนวนรายการตามแต่ละหมวดหมู่',
-  'สรุปภาพรวมและประเด็นสำคัญของชุดข้อมูล',
-  'ค้นหารายการ 5 อันดับแรกที่มีค่าสูงสุด',
+  'นำเข้าไฟล์ CSV เพื่อเริ่มวิเคราะห์ (+)',
+  'สรุปภาพรวมยอดขายและสินค้าตัวอย่าง',
+  'แสดงสินค้า 5 อันดับแรกที่มีราคาสูงสุด',
+  'แจกแจงจำนวนคำสั่งซื้อแยกตามลูกค้า',
 ];
 
 const LOADING_STAGES = [
@@ -233,6 +234,41 @@ export default function App() {
     syncSessionsFromBackend();
   }, []);
 
+  // ตรวจสอบโครงสร้างฐานข้อมูลตอนเริ่มต้น เพื่อตั้งคำถามแนะนำให้ตรงกับข้อมูลจริง (Context-Aware)
+  useEffect(() => {
+    const detectInitialSuggestedQueries = async () => {
+      try {
+        const schemaDict = await fetchSchemaDict();
+        if (schemaDict && typeof schemaDict === 'object' && !schemaDict.error) {
+          const uploadedEntries = Object.entries(schemaDict).filter(
+            ([_name, info]) => !info.is_system && !info.is_mock
+          );
+          if (uploadedEntries.length > 0) {
+            const [firstTableName, firstTableInfo] = uploadedEntries[0];
+            const previewCols = firstTableInfo.columns ? firstTableInfo.columns.map(c => c.name) : [];
+            const ignoredCols = ['id', 'ลำดับ', 'ที่ตั้ง', 'โทรศัพท์', 'อีเมลล์', 'เว็บไซต์', 'link', 'url', 'phone', 'address', 'desc', 'description'];
+            const bestCatCol = previewCols.find(c => {
+              const cl = c.toLowerCase();
+              return !ignoredCols.some(ign => cl.includes(ign)) && (cl.includes('หมวด') || cl.includes('ประเภท') || cl.includes('อำเภอ') || cl.includes('กลุ่ม') || cl.includes('status') || cl.includes('type') || cl.includes('category'));
+            }) || previewCols.find(c => !ignoredCols.some(ign => c.toLowerCase().includes(ign))) || '';
+
+            const breakdownQuery = bestCatCol
+              ? `แจกแจงจำนวนรายการตามแต่ละ${bestCatCol}ในตาราง ${firstTableName}`
+              : `แจกแจงจำนวนรายการตามแต่ละหมวดหมู่ในตาราง ${firstTableName}`;
+
+            setSuggestedQueries([
+              `แสดงข้อมูลทั้งหมดในตาราง ${firstTableName}`,
+              breakdownQuery,
+              `สรุปภาพรวมและสถิติสำคัญในตาราง ${firstTableName}`,
+              `ค้นหา 5 อันดับแรกในตาราง ${firstTableName}`,
+            ]);
+          }
+        }
+      } catch (_e) {}
+    };
+    detectInitialSuggestedQueries();
+  }, []);
+
   // ดึงประวัติการแชทของ Session จาก SQLite
   const fetchSessionHistory = useCallback(async (sessionId) => {
     try {
@@ -395,6 +431,9 @@ export default function App() {
         setAnalyticsTab('insights');
         setIsRightPanelOpen(true);
       }
+      if (data.follow_up_questions && data.follow_up_questions.length > 0) {
+        setSuggestedQueries(data.follow_up_questions);
+      }
     } catch (error) {
       console.error("Query execution error:", error);
       const errorMsg = error.response?.data?.message || error.response?.data?.detail || error.message || "ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาตรวจสอบสถานะเซิร์ฟเวอร์";
@@ -421,6 +460,15 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSuggestedChipClick = (sq) => {
+    if (!sq) return;
+    if (sq.includes('นำเข้าไฟล์ CSV') || sq.includes('(+)')) {
+      setIsUploadOpen(true);
+      return;
+    }
+    handleSendMessage(null, sq);
   };
 
   // Pin / Unpin Dashboard
@@ -854,7 +902,7 @@ export default function App() {
                   <button
                     key={idx}
                     className="query-chip-btn"
-                    onClick={() => handleSendMessage(null, sq)}
+                    onClick={() => handleSuggestedChipClick(sq)}
                     disabled={isLoading}
                   >
                     {sq}

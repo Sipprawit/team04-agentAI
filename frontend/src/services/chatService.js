@@ -40,3 +40,9 @@ export const saveChatMessage = async (sessionId, message) => {
   const response = await api.post(`/part4/chat-history/${sessionId}`, message);
   return response.data;
 };
+
+export const fetchSchemaDict = async () => {
+  const response = await api.get('/part1/schema-dict');
+  return response.data;
+};
+
