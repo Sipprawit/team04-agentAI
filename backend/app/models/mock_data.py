@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, inspect, text
 from datetime import date, timedelta
 from app.db.database import Base, engine, SessionLocal
 import random
@@ -30,18 +30,36 @@ class Order(Base):
 
 # --- ฟังก์ชันสร้างและจำลองข้อมูล ---
 
-def init_mock_db():
+def init_mock_db(reset: bool = True):
     """
-    สร้างตารางและข้อมูลจำลองถ้ายังไม่มีข้อมูล
+    สร้างตารางและข้อมูลจำลองเริ่มต้น
+    หาก reset=True: จะลบตารางทั้งหมดในฐานข้อมูล (รวมถึงตารางที่เคยอัปโหลด CSV)
+    และสร้างฐานข้อมูลใหม่ที่สะอาดเอี่ยมทุกครั้งที่รัน Backend
     """
-    # สร้างตารางทั้งหมดในฐานข้อมูล
+    if reset:
+        # ดึงรายชื่อตารางทั้งหมดในฐานข้อมูลปัจจุบันและลบทิ้ง
+        # ยกเว้นตาราง Part 4 (chat_sessions, chat_messages, pinned_items) ที่เก็บถาวร
+        preserve_tables = {"chat_sessions", "chat_messages", "pinned_items"}
+        inspector = inspect(engine)
+        existing_tables = inspector.get_table_names()
+        tables_to_drop = [t for t in existing_tables if t not in preserve_tables]
+        if tables_to_drop:
+            with engine.connect() as conn:
+                for tbl in tables_to_drop:
+                    conn.execute(text(f'DROP TABLE IF EXISTS "{tbl}";'))
+                conn.commit()
+            print(f"[FreshStart] Cleaned {len(tables_to_drop)} tables: {', '.join(tables_to_drop)}")
+            if preserve_tables & set(existing_tables):
+                print(f"[FreshStart] Preserved Part 4 tables: {', '.join(preserve_tables & set(existing_tables))}")
+
+    # สร้างตารางหลัก (customers, products, orders)
     Base.metadata.create_all(bind=engine)
     
     db = SessionLocal()
     try:
         # ตรวจสอบว่ามีข้อมูลในตาราง customers หรือไม่
         if db.query(Customer).first() is None:
-            print("[MockData] Creating mock data for E-Commerce...")
+            print("[MockData] Seeding fresh mock data for E-Commerce...")
             
             # 1. สร้าง Customers (10 รายการ)
             customers_data = [
@@ -80,14 +98,13 @@ def init_mock_db():
             products = db.query(Product).all()
             today = date.today()
             
-            # 3. สร้าง Orders (10 รายการ)
+            # 3. สร้าง Orders (15 รายการ พร้อมสุ่มกระจายอย่างสมดุล)
             orders_data = []
-            for _ in range(10):
+            for i in range(15):
                 customer = random.choice(customers)
                 product = random.choice(products)
-                quantity = random.randint(1, 5)
-                # สุ่มวันที่ย้อนหลังไม่เกิน 30 วัน
-                order_date = today - timedelta(days=random.randint(0, 30))
+                quantity = random.randint(1, 4)
+                order_date = today - timedelta(days=random.randint(0, 25))
                 
                 orders_data.append(
                     Order(
@@ -100,9 +117,9 @@ def init_mock_db():
             
             db.add_all(orders_data)
             db.commit()
-            print("[MockData] Mock data created successfully (3 tables)")
+            print("[MockData] Fresh database initialized with 3 clean tables (customers, products, orders)")
         else:
-            print("[MockData] Mock data already exists, skipping.")
+            print("[MockData] Mock data already exists.")
             
     finally:
         db.close()
@@ -110,4 +127,4 @@ def init_mock_db():
 if __name__ == "__main__":
     import sys
     sys.stdout.reconfigure(encoding="utf-8")
-    init_mock_db()
+    init_mock_db(reset=True)

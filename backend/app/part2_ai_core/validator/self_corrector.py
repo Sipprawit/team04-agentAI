@@ -6,10 +6,11 @@ from app.part2_ai_core.translator.nl_translator import clean_extracted_sql
 logger = logging.getLogger("SelfCorrector")
 
 
-def self_heal_sql(failed_sql: str, error_message: str, schema_info: str) -> str:
+def self_heal_sql(failed_sql: str, error_message: str, schema_info: str, user_query: str = "") -> str:
     """
     ระบบตรวจสอบและแก้ไขโค้ดอัตโนมัติ (Agentic Self-Correction System)
     วิเคราะห์สาเหตุของ Error แล้วให้ AI ปรับปรุงแก้ไขคำสั่ง SQL ใหม่อัตโนมัติ (Self-healing)
+    รับ user_query เพื่อให้ LLM ทราบเจตนาตั้งต้นของผู้ใช้เวลาซ่อมแซมคำสั่ง
     """
     try:
         llm = get_llm()
@@ -19,9 +20,11 @@ def self_heal_sql(failed_sql: str, error_message: str, schema_info: str) -> str:
                     "DO NOT include explanations, reasoning, or markdown blocks."
         )
 
+        user_context = f"\nคำถามเดิมจากผู้ใช้: \"{user_query}\"\n" if user_query else ""
+
         prompt = f"""โครงสร้างตารางในฐานข้อมูล:
 {schema_info}
-
+{user_context}
 คำสั่ง SQL ที่รันไม่ผ่าน:
 {failed_sql}
 

@@ -26,7 +26,11 @@ def get_db():
     finally:
         db.close()
 
-def init_db():
-    """สร้างตารางและ Seed ข้อมูลจำลองตอน Startup (ถ้ายังไม่มี)"""
+def init_db(reset: bool = True):
+    """
+    สร้างตารางและ Seed ข้อมูลจำลองตอน Startup
+    เมื่อ reset=True: จะล้างตารางทั้งหมดในฐานข้อมูล (รวมถึงตาราง CSV ชั่วคราว)
+    และสร้างข้อมูล Mock Data ชุดสะอาดใหม่เสมอ
+    """
     from app.models.mock_data import init_mock_db
-    init_mock_db()
+    init_mock_db(reset=reset)

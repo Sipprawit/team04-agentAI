@@ -1,0 +1,282 @@
+[
+  {
+    "id": 1,
+    "category": "Filter",
+    "question": "แสดงรายชื่อสินค้าทั้งหมดพร้อมราคา",
+    "ground_truth_sql": "SELECT id, name, price FROM products;",
+    "description": "ดึงข้อมูลสินค้าทั้งหมด"
+  },
+  {
+    "id": 2,
+    "category": "Filter",
+    "question": "แสดงสินค้าที่มีราคามากกว่า 1000 บาท",
+    "ground_truth_sql": "SELECT id, name, price FROM products WHERE price > 1000;",
+    "description": "กรองสินค้าตามเงื่อนไขราคา"
+  },
+  {
+    "id": 3,
+    "category": "Filter",
+    "question": "ค้นหาลูกค้าชื่อสมชาย",
+    "ground_truth_sql": "SELECT id, name, email FROM customers WHERE name LIKE '%สมชาย%';",
+    "description": "ค้นหาลูกค้าตามชื่อ"
+  },
+  {
+    "id": 4,
+    "category": "Filter",
+    "question": "แสดงสินค้าที่มีราคาอยู่ระหว่าง 500 ถึง 2000 บาท",
+    "ground_truth_sql": "SELECT id, name, price FROM products WHERE price BETWEEN 500 AND 2000;",
+    "description": "กรองสินค้าตามช่วงราคา"
+  },
+  {
+    "id": 5,
+    "category": "Filter",
+    "question": "แสดงคำสั่งซื้อที่มีจำนวนสินค้ามากกว่า 3 ชิ้น",
+    "ground_truth_sql": "SELECT id, customer_id, product_id, quantity, date FROM orders WHERE quantity > 3;",
+    "description": "กรองคำสั่งซื้อตามจำนวนสินค้า"
+  },
+  {
+    "id": 6,
+    "category": "Filter",
+    "question": "ค้นหาลูกค้าที่ใช้อีเมลโดเมน example.com",
+    "ground_truth_sql": "SELECT id, name, email FROM customers WHERE email LIKE '%@example.com';",
+    "description": "กรองอีเมลลูกค้า"
+  },
+  {
+    "id": 7,
+    "category": "Filter",
+    "question": "แสดงคำสั่งซื้อที่เกิดขึ้นหลังจากวันที่ 2024-01-01",
+    "ground_truth_sql": "SELECT id, customer_id, product_id, quantity, date FROM orders WHERE date >= '2024-01-01';",
+    "description": "กรองคำสั่งซื้อตามวันที่"
+  },
+  {
+    "id": 8,
+    "category": "Filter",
+    "question": "แสดงสินค้าที่มีราคาไม่เกิน 500 บาท",
+    "ground_truth_sql": "SELECT id, name, price FROM products WHERE price <= 500;",
+    "description": "กรองสินค้าราคาประหยัด"
+  },
+  {
+    "id": 9,
+    "category": "Filter",
+    "question": "แสดงคำสั่งซื้อของลูกค้ารหัส 1",
+    "ground_truth_sql": "SELECT id, customer_id, product_id, quantity, date FROM orders WHERE customer_id = 1;",
+    "description": "กรองคำสั่งซื้อตามรหัสลูกค้า"
+  },
+  {
+    "id": 10,
+    "category": "Filter",
+    "question": "ค้นหาสินค้าที่มีคำว่า 'โน้ตบุ๊ก' หรือ 'คอมพิวเตอร์'",
+    "ground_truth_sql": "SELECT id, name, price FROM products WHERE name LIKE '%โน้ตบุ๊ก%' OR name LIKE '%คอมพิวเตอร์%';",
+    "description": "ค้นหาชื่อสินค้าด้วยหลายคำค้น"
+  },
+  {
+    "id": 11,
+    "category": "SortLimit",
+    "question": "แสดงสินค้า 5 อันดับแรกที่มีราคาสูงที่สุด",
+    "ground_truth_sql": "SELECT id, name, price FROM products ORDER BY price DESC LIMIT 5;",
+    "description": "เรียงลำดับราคาสูงสุด 5 รายการ"
+  },
+  {
+    "id": 12,
+    "category": "SortLimit",
+    "question": "แสดงสินค้า 3 รายการที่มีราคาถูกที่สุด",
+    "ground_truth_sql": "SELECT id, name, price FROM products ORDER BY price ASC LIMIT 3;",
+    "description": "เรียงลำดับราคาต่ำสุด 3 รายการ"
+  },
+  {
+    "id": 13,
+    "category": "SortLimit",
+    "question": "แสดงคำสั่งซื้อล่าสุด 10 รายการ",
+    "ground_truth_sql": "SELECT id, customer_id, product_id, quantity, date FROM orders ORDER BY date DESC LIMIT 10;",
+    "description": "คำสั่งซื้อเรียงตามวันล่าสุด"
+  },
+  {
+    "id": 14,
+    "category": "SortLimit",
+    "question": "แสดงรายชื่อลูกค้าเรียงตามตัวอักษรของชื่อ",
+    "ground_truth_sql": "SELECT id, name, email FROM customers ORDER BY name ASC;",
+    "description": "เรียงลำดับชื่อลูกค้า"
+  },
+  {
+    "id": 15,
+    "category": "SortLimit",
+    "question": "คำสั่งซื้อที่สั่งจำนวนชิ้นมากที่สุด 5 อันดับแรก",
+    "ground_truth_sql": "SELECT id, customer_id, product_id, quantity, date FROM orders ORDER BY quantity DESC LIMIT 5;",
+    "description": "คำสั่งซื้อจำนวนชิ้นมากที่สุด"
+  },
+  {
+    "id": 16,
+    "category": "SortLimit",
+    "question": "แสดงสินค้าอันดับที่ 1 ที่มีราคาสูงที่สุดในร้าน",
+    "ground_truth_sql": "SELECT id, name, price FROM products ORDER BY price DESC LIMIT 1;",
+    "description": "สินค้าราคาสูงสุดอันดับหนึ่ง"
+  },
+  {
+    "id": 17,
+    "category": "SortLimit",
+    "question": "รายชื่อลูกค้า 5 คนแรกตามรหัสสมาชิก",
+    "ground_truth_sql": "SELECT id, name, email FROM customers ORDER BY id ASC LIMIT 5;",
+    "description": "ลูกค้า 5 คนแรกตามรหัส"
+  },
+  {
+    "id": 18,
+    "category": "SortLimit",
+    "question": "คำสั่งซื้อแรกสุดในระบบ",
+    "ground_truth_sql": "SELECT id, customer_id, product_id, quantity, date FROM orders ORDER BY date ASC LIMIT 1;",
+    "description": "คำสั่งซื้อแรกสุด"
+  },
+  {
+    "id": 19,
+    "category": "Aggregation",
+    "question": "ราคาเฉลี่ยของสินค้าทั้งหมดในระบบคือเท่าไหร่",
+    "ground_truth_sql": "SELECT AVG(price) AS average_price FROM products;",
+    "description": "ราคาเฉลี่ยของสินค้า"
+  },
+  {
+    "id": 20,
+    "category": "Aggregation",
+    "question": "มีลูกค้าทั้งหมดกี่คนในระบบ",
+    "ground_truth_sql": "SELECT COUNT(*) AS total_customers FROM customers;",
+    "description": "นับจำนวนลูกค้าทั้งหมด"
+  },
+  {
+    "id": 21,
+    "category": "Aggregation",
+    "question": "มีรายการคำสั่งซื้อทั้งหมดกี่รายการ",
+    "ground_truth_sql": "SELECT COUNT(*) AS total_orders FROM orders;",
+    "description": "นับจำนวนออเดอร์ทั้งหมด"
+  },
+  {
+    "id": 22,
+    "category": "Aggregation",
+    "question": "ราคาสินค้าที่แพงที่สุดและถูกที่สุดในระบบ",
+    "ground_truth_sql": "SELECT MAX(price) AS max_price, MIN(price) AS min_price FROM products;",
+    "description": "ราคาสูงสุดและต่ำสุด"
+  },
+  {
+    "id": 23,
+    "category": "Aggregation",
+    "question": "จำนวนชิ้นสินค้าที่ถูกสั่งซื้อรวมทั้งหมด",
+    "ground_truth_sql": "SELECT SUM(quantity) AS total_quantity FROM orders;",
+    "description": "ผลรวมจำนวนชิ้นที่ขายได้"
+  },
+  {
+    "id": 24,
+    "category": "Aggregation",
+    "question": "จำนวนชิ้นเฉลี่ยต่อหนึ่งคำสั่งซื้อ",
+    "ground_truth_sql": "SELECT AVG(quantity) AS avg_quantity FROM orders;",
+    "description": "จำนวนชิ้นเฉลี่ยต่อบิล"
+  },
+  {
+    "id": 25,
+    "category": "Aggregation",
+    "question": "มีสินค้าทั้งหมดกี่รายการในระบบ",
+    "ground_truth_sql": "SELECT COUNT(*) AS total_products FROM products;",
+    "description": "นับรายการสินค้า"
+  },
+  {
+    "id": 26,
+    "category": "Aggregation",
+    "question": "จำนวนชิ้นที่สั่งซื้อมากที่สุดในหนึ่งคำสั่งซื้อ",
+    "ground_truth_sql": "SELECT MAX(quantity) AS max_quantity FROM orders;",
+    "description": "จำนวนชิ้นสูงสุดในบิลเดียว"
+  },
+  {
+    "id": 27,
+    "category": "Aggregation",
+    "question": "ผลรวมราคาสินค้าทุกรายการในระบบ",
+    "ground_truth_sql": "SELECT SUM(price) AS sum_price FROM products;",
+    "description": "ผลรวมราคาสินค้า"
+  },
+  {
+    "id": 28,
+    "category": "Aggregation",
+    "question": "คำนวณส่วนต่างระหว่างราคาสินค้าที่แพงที่สุดกับถูกที่สุด",
+    "ground_truth_sql": "SELECT (MAX(price) - MIN(price)) AS price_range FROM products;",
+    "description": "ช่วงความต่างของราคา"
+  },
+  {
+    "id": 29,
+    "category": "GroupBy",
+    "question": "แจกแจงจำนวนคำสั่งซื้อแยกตามรหัสลูกค้า",
+    "ground_truth_sql": "SELECT customer_id, COUNT(*) AS count FROM orders GROUP BY customer_id ORDER BY count DESC;",
+    "description": "นับจำนวนบิลแยกตามลูกค้า"
+  },
+  {
+    "id": 30,
+    "category": "GroupBy",
+    "question": "แจกแจงจำนวนชิ้นที่ขายได้แยกตามรหัสสินค้า",
+    "ground_truth_sql": "SELECT product_id, SUM(quantity) AS total_qty FROM orders GROUP BY product_id ORDER BY total_qty DESC;",
+    "description": "ยอดรวมจำนวนชิ้นแยกตามสินค้า"
+  },
+  {
+    "id": 31,
+    "category": "GroupBy",
+    "question": "จำนวนคำสั่งซื้อแยกตามแต่ละเดือน",
+    "ground_truth_sql": "SELECT SUBSTR(date, 1, 7) AS month, COUNT(*) AS order_count FROM orders GROUP BY month ORDER BY month;",
+    "description": "นับบิลรายเดือน"
+  },
+  {
+    "id": 32,
+    "category": "GroupBy",
+    "question": "จำนวนชิ้นเฉลี่ยที่สั่งซื้อแยกตามรหัสลูกค้า",
+    "ground_truth_sql": "SELECT customer_id, AVG(quantity) AS avg_qty FROM orders GROUP BY customer_id;",
+    "description": "จำนวนชิ้นเฉลี่ยต่อลูกค้า"
+  },
+  {
+    "id": 33,
+    "category": "GroupBy",
+    "question": "ลูกค้ารายใดบ้างที่มีคำสั่งซื้อมากกว่า 1 ครั้ง",
+    "ground_truth_sql": "SELECT customer_id, COUNT(*) AS order_count FROM orders GROUP BY customer_id HAVING COUNT(*) > 1;",
+    "description": "ลูกค้าที่สั่งซ้ำ"
+  },
+  {
+    "id": 34,
+    "category": "GroupBy",
+    "question": "สินค้ารหัสใดบ้างที่มียอดสั่งซื้อรวมเกิน 5 ชิ้น",
+    "ground_truth_sql": "SELECT product_id, SUM(quantity) AS total_sold FROM orders GROUP BY product_id HAVING SUM(quantity) > 5;",
+    "description": "สินค้าที่ขายได้เกิน 5 ชิ้น"
+  },
+  {
+    "id": 35,
+    "category": "Join",
+    "question": "แสดงรายละเอียดคำสั่งซื้อพร้อมชื่อลูกค้าและจำนวนสินค้า",
+    "ground_truth_sql": "SELECT o.id, c.name AS customer_name, o.product_id, o.quantity, o.date FROM orders o JOIN customers c ON o.customer_id = c.id;",
+    "description": "JOIN orders กับ customers"
+  },
+  {
+    "id": 36,
+    "category": "Join",
+    "question": "แสดงรายละเอียดคำสั่งซื้อพร้อมชื่อสินค้าและราคาต่อหน่วย",
+    "ground_truth_sql": "SELECT o.id, p.name AS product_name, p.price, o.quantity, o.date FROM orders o JOIN products p ON o.product_id = p.id;",
+    "description": "JOIN orders กับ products"
+  },
+  {
+    "id": 37,
+    "category": "Join",
+    "question": "แสดงคำสั่งซื้อแบบสมบูรณ์พร้อมชื่อลูกค้า ชื่อสินค้า จำนวน และยอดเงินรวมของแต่ละรายการ",
+    "ground_truth_sql": "SELECT o.id, c.name AS customer_name, p.name AS product_name, o.quantity, p.price, (o.quantity * p.price) AS item_total FROM orders o JOIN customers c ON o.customer_id = c.id JOIN products p ON o.product_id = p.id;",
+    "description": "JOIN 3 ตาราง orders, customers, products"
+  },
+  {
+    "id": 38,
+    "category": "Join",
+    "question": "สรุปยอดขายรวมเป็นเงินทั้งหมดจากทุกคำสั่งซื้อ",
+    "ground_truth_sql": "SELECT SUM(o.quantity * p.price) AS grand_total_sales FROM orders o JOIN products p ON o.product_id = p.id;",
+    "description": "คำนวณยอดขายรวมทั้งหมดด้วย JOIN"
+  },
+  {
+    "id": 39,
+    "category": "Join",
+    "question": "แสดงยอดสั่งซื้อรวมเป็นเงินของลูกค้าแต่ละคนเรียงจากมากไปน้อย",
+    "ground_truth_sql": "SELECT c.name, SUM(o.quantity * p.price) AS total_spent FROM customers c JOIN orders o ON c.id = o.customer_id JOIN products p ON o.product_id = p.id GROUP BY c.name ORDER BY total_spent DESC;",
+    "description": "ยอดซื้อรวมต่อลูกค้าด้วย JOIN 3 ตาราง"
+  },
+  {
+    "id": 40,
+    "category": "Join",
+    "question": "ค้นหาลูกค้าที่ยังไม่เคยมีคำสั่งซื้อใดๆ ในระบบเลย",
+    "ground_truth_sql": "SELECT c.id, c.name, c.email FROM customers c LEFT JOIN orders o ON c.id = o.customer_id WHERE o.id IS NULL;",
+    "description": "LEFT JOIN ค้นหาลูกค้าที่ยังไม่เคยซื้อ"
+  }
+]

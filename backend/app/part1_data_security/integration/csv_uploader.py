@@ -18,6 +18,7 @@ _SQL_RESERVED = {
     "select", "insert", "update", "delete", "drop", "create", "alter",
     "table", "from", "where", "and", "or", "not", "null", "index",
     "pragma", "attach", "detach", "vacuum", "grant", "revoke",
+    "order", "group", "by", "limit", "join", "having", "union",
 }
 
 
@@ -111,6 +112,25 @@ def _detect_column_type(values: list) -> str:
     return "TEXT"
 
 
+def _normalize_date(date_str: str) -> str:
+    """แปลงรูปแบบวันที่ DD/MM/YYYY หรือ YYYY/MM/DD เป็น ISO YYYY-MM-DD สำหรับ SQLite"""
+    if not date_str or not isinstance(date_str, str):
+        return date_str
+    date_str = date_str.strip()
+    # ถ้าเป็น YYYY-MM-DD อยู่แล้ว ไม่ต้องแปลง
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+        return date_str
+    # DD/MM/YYYY → YYYY-MM-DD
+    m = re.match(r'^(\d{2})/(\d{2})/(\d{4})$', date_str)
+    if m:
+        return f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+    # YYYY/MM/DD → YYYY-MM-DD
+    m = re.match(r'^(\d{4})/(\d{2})/(\d{2})$', date_str)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+    return date_str
+
+
 def validate_file_extension(filename: str) -> bool:
     """ตรวจสอบนามสกุลไฟล์ว่าอนุญาตหรือไม่"""
     if not filename:
@@ -199,6 +219,7 @@ def upload_csv_to_db(file_path: str, table_name: str) -> dict:
         with engine.connect() as conn:
             conn.execute(text(drop_sql))
             conn.execute(text(create_sql))
+            batch_rows = []
             for row in rows:
                 if len(row) == len(headers):
                     row_dict = {}
@@ -218,9 +239,15 @@ def upload_csv_to_db(file_path: str, table_name: str) -> dict:
                                     val = float(clean_num)
                                 except ValueError:
                                     pass
+                            elif col_types[col] == "DATE":
+                                # Normalize วันที่เป็น ISO format YYYY-MM-DD สำหรับ SQLite
+                                val = _normalize_date(val)
                         row_dict[f"param_{i}"] = val
-                    conn.execute(text(insert_sql), row_dict)
-                    inserted_count += 1
+                    batch_rows.append(row_dict)
+
+            if batch_rows:
+                conn.execute(text(insert_sql), batch_rows)
+                inserted_count = len(batch_rows)
             conn.commit()
 
         return {

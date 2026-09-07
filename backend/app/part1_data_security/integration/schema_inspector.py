@@ -1,19 +1,23 @@
 from sqlalchemy import text, inspect
 from app.db.database import engine
 
-EXCLUDED_TABLES = {"audit_logs", "sqlite_sequence"}
+EXCLUDED_TABLES = {"audit_logs", "sqlite_sequence", "chat_sessions", "chat_messages", "pinned_items"}
+MOCK_TABLES = {"customers", "products", "orders"}
 
 
 def get_database_schema_info(exclude_system_tables: bool = True) -> str:
     """
     อ่านและบันทึกโครงสร้างข้อมูล (Schema Mapping System)
-    ดึงตารางทั้งหมด คอลัมน์ ประเภทข้อมูล Foreign Keys และจำนวนแถว เพื่อส่งให้ AI อ่าน
+    จัดลำดับตารางที่ผู้ใช้อัปโหลดเข้ามา (Uploaded Tables) ขึ้นก่อนตารางจำลอง (Mock Tables)
+    เพื่อให้ AI ทราบว่าควรดึงข้อมูลจากตารางที่ผู้ใช้อัปโหลดเป็นลำดับแรก
     """
     try:
         inspector = inspect(engine)
         tables = inspector.get_table_names()
 
-        schema_text = []
+        uploaded_text = []
+        mock_text = []
+
         with engine.connect() as conn:
             for table_name in tables:
                 if exclude_system_tables and table_name in EXCLUDED_TABLES:
@@ -35,20 +39,36 @@ def get_database_schema_info(exclude_system_tables: bool = True) -> str:
 
                 # 3. จำนวนแถวคร่าวๆ
                 try:
-                    row_count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar() or 0
+                    row_count = conn.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar() or 0
                 except Exception:
                     row_count = "N/A"
 
-                table_str = f"Table: {table_name} (Rows: {row_count})\nColumns: {', '.join(col_info)}"
+                table_str = f'Table: "{table_name}" (Rows: {row_count})\nColumns: {", ".join(col_info)}'
                 if fk_info:
                     table_str += f"\nForeign Keys: {'; '.join(fk_info)}"
 
-                schema_text.append(table_str)
+                if table_name not in MOCK_TABLES:
+                    uploaded_text.append(table_str)
+                else:
+                    mock_text.append(table_str)
 
-        if not schema_text:
+        output_sections = []
+        if uploaded_text:
+            output_sections.append(
+                "=== ตารางข้อมูลที่ผู้ใช้อัปโหลดเข้ามา (User Uploaded Datasets - สำคัญที่สุด / ใช้เป็นหลัก) ===\n"
+                + "\n\n".join(uploaded_text)
+            )
+
+        if mock_text:
+            output_sections.append(
+                "=== ตารางข้อมูลตัวอย่างจำลองระบบ (Default Mock Tables) ===\n"
+                + "\n\n".join(mock_text)
+            )
+
+        if not output_sections:
             return "No user tables found in database."
 
-        return "\n\n".join(schema_text)
+        return "\n\n".join(output_sections)
     except Exception as e:
         return f"Error retrieving schema: {str(e)}"
 
@@ -77,7 +97,7 @@ def get_schema_dict() -> dict:
                     for fk in inspector.get_foreign_keys(table_name)
                 ]
                 try:
-                    row_count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar() or 0
+                    row_count = conn.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar() or 0
                 except Exception:
                     row_count = 0
 

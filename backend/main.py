@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
-# 1. โหลด Environment Variables ทันทีที่ไฟล์นี้ถูกเรียก (สำคัญสำหรับดึง Gemini API Key)
+# 1. โหลด Environment Variables ทันทีที่ไฟล์นี้ถูกเรียก (สำคัญสำหรับดึง Groq API Key)
 load_dotenv()
 
 from app.core.config import settings
@@ -13,7 +13,7 @@ from app.db.database import init_db
 from app.api.part1_router import router as part1_router
 from app.api.part2_router import router as part2_router
 from app.api.part3_router import router as part3_router
-from app.api.part4_router import router as part4_router
+from app.api.part4_router import router as part4_router, _init_part4_tables
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -23,6 +23,10 @@ async def lifespan(app: FastAPI):
     """
     print("[Startup] Initializing database...")
     init_db()
+    
+    # สร้างตาราง Part 4 (chat_sessions, chat_messages, pinned_items)
+    _init_part4_tables()
+    print("[Startup] Part 4 tables initialized.")
     
     # 2. ตรวจสอบความพร้อมของระบบ AI
     if not os.getenv("GROQ_API_KEY"):

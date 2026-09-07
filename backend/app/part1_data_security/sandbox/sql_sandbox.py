@@ -1,6 +1,5 @@
-import signal
 import threading
-from sqlalchemy import text, event
+from sqlalchemy import text
 from app.db.database import engine
 from app.part1_data_security.sandbox.audit_logger import log_execution
 
@@ -81,16 +80,22 @@ def execute_sql_in_sandbox(sql_query: str, max_rows: int = MAX_ROWS, timeout_sec
                     data = []
                     is_truncated = False
 
-                # --- ล้าง Timeout Handler ---
-                _clear_timeout_handler(conn, timer)
-                timer = None
-
             finally:
-                # --- รีเซ็ต Read-Only เสมอ เพื่อคืน connection กลับ pool ในสถานะปกติ ---
+                # --- ล้าง Timeout Handler เสมอ ---
+                if timer is not None:
+                    _clear_timeout_handler(conn, timer)
+                    timer = None
+
+                # --- รีเซ็ต Transaction และ Read-Only เพื่อคืน connection กลับ pool ในสถานะปกติ ---
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+
                 try:
                     conn.execute(text("PRAGMA query_only = OFF;"))
                 except Exception:
-                    pass  # ถ้ารีเซ็ตไม่ได้ ไม่ให้ crash ซ้อน
+                    pass
 
         # บันทึกประวัติสำเร็จ
         log_execution(sql_query, status="success", error_message=None)

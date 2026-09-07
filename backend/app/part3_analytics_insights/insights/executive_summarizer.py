@@ -33,8 +33,8 @@ def clean_summary_response(text_input: str) -> str:
 
         if is_thinking:
             if any(l.startswith(prefix) for prefix in [
-                '**ยอดขาย', '**สินค้า', '- ยอดขาย', '- สินค้า', 'ยอดขาย', 'สินค้า',
-                'สัดส่วน', 'จากข้อมูล', 'รายงาน', '**', '#'
+                '**ยอด', '**สัดส่วน', '**ผล', '**ข้อมูล', '**รายงาน', '**สินค้า', '**สถิติ',
+                '**สรุป', '**รายการ', '**หมวด', '- ', '#', '**', 'ปี '
             ]):
                 if not is_english_meta:
                     is_thinking = False
@@ -52,27 +52,35 @@ def clean_summary_response(text_input: str) -> str:
 
 def _fallback_summary(user_query: str, raw_data: list, stats: dict) -> str:
     """สร้างข้อความสรุปแบบ Rule-based กรณีที่ LLM ไม่ตอบสนอง"""
+    if not raw_data:
+        return "ไม่พบข้อมูลที่ตรงกับเงื่อนไขที่ค้นหา"
     count = len(raw_data)
     first_row = raw_data[0]
     keys = list(first_row.keys())
 
-    lines = [f"**ผลการค้นหาข้อมูล ({count} รายการ)**"]
-    for row in raw_data[:5]:
-        val_str = ", ".join([f"{k}: {v}" for k, v in row.items()])
-        lines.append(f"- {val_str}")
-    if count > 5:
-        lines.append(f"- และอีก {count - 5} รายการ...")
+    unit_val = ""
+    for k in keys:
+        if 'unit' in k.lower() or 'หน่วย' in k.lower():
+            unit_val = str(first_row.get(k, ""))
+            break
 
-    if "total" in stats:
-        lines.append(f"\n📊 **สถิติรวม**: ยอดรวม = {stats.get('total'):,}, ค่าเฉลี่ย = {stats.get('average'):,}")
+    lines = [f"**ผลการค้นหาข้อมูล ({count} รายการ)**"]
+    for row in raw_data[:6]:
+        val_str = ", ".join([f"{k}: {v}" for k, v in row.items() if v is not None])
+        lines.append(f"- {val_str}")
+    if count > 6:
+        lines.append(f"- และอีก {count - 6} รายการ...")
+
+    if "total" in stats and "average" in stats:
+        u_suffix = f" {unit_val}" if unit_val else ""
+        lines.append(f"\n📊 **สถิติสำคัญ**: ยอดรวม = {stats.get('total'):,}{u_suffix}, ค่าเฉลี่ย = {stats.get('average'):,}{u_suffix}")
     return "\n".join(lines)
 
 
 def generate_executive_insight(user_query: str, raw_data: list) -> str:
     """
     ระบบสร้างข้อความสรุปข้อมูลเชิงลึก (Automated Insight Generator System)
-    เขียนบรรยายสรุปตัวเลขและสถิติสำคัญให้ผู้บริหารอ่านเข้าใจง่าย
-    พร้อม Fallback กรณี LLM Error
+    เขียนบรรยายสรุปตัวเลขและสถิติสำคัญอย่างแม่นยำตามหน่วยจริงในข้อมูล (เช่น ร้อยละ, ชิ้น, บาท)
     """
     if not raw_data:
         return "ไม่พบข้อมูลที่ตรงกับเงื่อนไขในฐานข้อมูล"
@@ -81,27 +89,30 @@ def generate_executive_insight(user_query: str, raw_data: list) -> str:
 
     try:
         llm = get_llm()
-        sample_data = raw_data[:15]  # จำกัด 15 รายการเพื่อประหยัด Token
+        sample_data = raw_data[:15]
 
-        summary_prompt = f"""คุณคือ Data Analyst Assistant สร้าง Data Report สรุปข้อมูล E-commerce
+        summary_prompt = f"""คุณคือ Data Analyst Assistant ผู้เชี่ยวชาญด้านการวิเคราะห์ข้อมูลและสรุปรายงานเชิงสถิติ
 คำถามจากผู้ใช้: "{user_query}"
-ข้อมูลที่ดึงจากฐานข้อมูล: {sample_data}
+ข้อมูลที่ดึงจากฐานข้อมูล (ซึ่งผ่านการกรองเงื่อนไขตามคำถามมาแล้ว): {sample_data}
+จำนวนข้อมูลทั้งหมดที่พบ: {len(raw_data)} รายการ
 สถิติที่คำนวณเพิ่มเติม: {stats}
 
-จงตอบผู้ใช้โดยยึดโครงสร้างและข้อบังคับนี้อย่างเคร่งครัด:
+จงสรุปและรายงานผลลัพธ์ข้อมูลที่ได้รับมานี้โดยยึดข้อบังคับอย่างเคร่งครัด:
 
-โครงสร้างการตอบ:
-1. Headline (สรุปผลหลัก): เขียนแค่ 1 บรรทัด เน้นตัวหนา (Markdown) ในส่วนสำคัญ
-2. Details (รายละเอียด): ใช้ Bullet points (- ...)
-3. Insight (ข้อสังเกต): สถิติหรือข้อสังเกตที่เป็นประโยชน์ 1 บรรทัดสั้นๆ
-
-ข้อบังคับ:
-1. ห้ามเกริ่นนำหรือปิดท้าย ให้เริ่มที่ Headline ทันที
-2. ตอบเป็นภาษาไทยที่กระชับและเป็นทางการ
+1. **ข้อมูลที่ได้รับมานี้คือผลลัพธ์ที่ตรงตามเงื่อนไขที่ผู้ใช้ถามเรียบร้อยแล้ว**:
+   - จงนำรายชื่อและตัวเลขในข้อมูลที่ได้รับมาสรุปให้ผู้ใช้ทันที (ห้ามปฏิเสธว่าไม่มีข้อมูลหรือไม่พบคอลัมน์)
+2. **ระบุหน่วย (Unit) และความหมายของข้อมูลให้ถูกต้อง**:
+   - หากหน่วยเป็น "ร้อยละ" หรือ "%" ให้ระบุหน่วยเป็น "ร้อยละ" หรือ "%" เสมอ (ห้ามเปลี่ยนเป็นบาทหรือล้านบาท)
+3. **โครงสร้างการตอบ**:
+   - **Headline (บรรทัดแรก)**: สรุปผลลัพธ์หลัก 1 บรรทัด (ใช้ Markdown **ตัวหนา**)
+   - **Details**: รายละเอียดสำคัญโดยใช้ Bullet points (`- ...`) แสดงรายชื่อหมวดธุรกิจ/สินค้าและค่าตัวเลข
+   - **Insight**: ข้อสังเกตที่เป็นประโยชน์ 1 บรรทัดสั้นๆ
+4. **ข้อบังคับ**:
+   - ห้ามเกริ่นนำหรือลงท้าย ให้เข้าเรื่องที่ Headline ทันที
+   - ใช้ภาษาไทยที่กระชับ เป็นทางการ และอ่านง่าย
 """
         system_msg = SystemMessage(
-            content="You are a professional Data Analyst Assistant. "
-                    "Output ONLY the final Thai report directly without reasoning or check-lists."
+            content="You are an expert Data Analyst Assistant. Present and summarize the filtered data provided directly. DO NOT reject or complain about missing filter columns since the SQL query has already filtered the records."
         )
 
         raw_answer = llm.invoke([system_msg, HumanMessage(content=summary_prompt)]).content.strip()
