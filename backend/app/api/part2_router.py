@@ -80,12 +80,12 @@ def _generate_follow_up_questions(user_query: str, sql_query: str, raw_data: lis
 
     # Fallback กรณีไม่มีข้อมูล หรือไม่เข้าเงื่อนไขข้างต้น
     if not follow_ups:
-        # ตรวจสอบชื่อตารางใน SQL
         tbl_match = re.search(r'FROM\s+["\']?([a-zA-Z0-9_\u0E00-\u0E7F]+)["\']?', sql_query, re.IGNORECASE)
-        tbl = tbl_match.group(1) if tbl_match else "ตารางข้อมูล"
-        follow_ups.append(f"แสดงโครงสร้างและข้อมูลทั้งหมดใน {tbl}")
-        follow_ups.append(f"สรุปภาพรวม 10 แถวแรกของ {tbl}")
-        follow_ups.append("มีกลุ่มหรือหมวดหมู่ข้อมูลใดบ้างในชุดนี้?")
+        tbl = tbl_match.group(1) if tbl_match else "ชุดข้อมูล"
+        follow_ups.append("แสดงข้อมูลทั้งหมดในชุดข้อมูล")
+        follow_ups.append("สรุปภาพรวมและสถิติสำคัญของข้อมูล")
+        follow_ups.append("แจกแจงจำนวนรายการตามแต่ละหมวดหมู่")
+        follow_ups.append("ค้นหา 5 อันดับแรกที่มีค่ามากที่สุด")
 
     # คืนค่า 2-3 คำถามที่ไม่ซ้ำกับคำถามเดิมของผู้ใช้
     clean_follow_ups = [f for f in follow_ups if f.strip() and f.strip() != user_query.strip()][:3]
@@ -95,24 +95,20 @@ def _generate_follow_up_questions(user_query: str, sql_query: str, raw_data: lis
 def _create_out_of_scope_response(query: str) -> dict:
     """
     สร้างคำตอบปฏิเสธอย่างสุภาพเมื่อเจอคำถามนอกขอบเขตข้อมูล (Out-of-Scope Guardrails & Zero Hallucination)
-    ระบุบทบาทของระบบ พร้อมแนะนำ Guided Prompts ที่ระบบตอบได้จริง
+    ระบุบทบาทของระบบ พร้อมแนะนำ Guided Prompts ที่ยืดหยุ่นครอบคลุมทุกประเภทข้อมูล
     """
     uploaded = get_uploaded_tables()
+    guides = [
+        "แสดงข้อมูลทั้งหมดในชุดข้อมูล",
+        "สรุปภาพรวมและสถิติสำคัญของข้อมูล",
+        "แจกแจงจำนวนรายการตามแต่ละหมวดหมู่",
+        "ค้นหา 5 อันดับแรกที่มีค่ามากที่สุด",
+    ]
     if uploaded:
         tbl = uploaded[0]
-        guides = [
-            f"แสดงข้อมูลทั้งหมดในตาราง {tbl}",
-            f"สรุปภาพรวมและสถิติสำคัญในตาราง {tbl}",
-            f"ค้นหา 5 อันดับแรกในตาราง {tbl}",
-        ]
-        scope_desc = f"วิเคราะห์ข้อมูลเชิงลึกจากชุดข้อมูลที่คุณนำเข้า (เช่น ตาราง `{tbl}`)"
+        scope_desc = f"วิเคราะห์ข้อมูลและสรุปสถิติเชิงลึกจากชุดข้อมูลที่คุณนำเข้า (เช่น ตาราง `{tbl}`)"
     else:
-        guides = [
-            "สรุปภาพรวมยอดขายและสินค้าตัวอย่าง",
-            "แสดงสินค้า 5 อันดับแรกที่มีราคาสูงสุด",
-            "แจกแจงจำนวนคำสั่งซื้อแยกตามลูกค้า",
-        ]
-        scope_desc = "วิเคราะห์ข้อมูลเชิงธุรกิจ ยอดขาย และชุดข้อมูลจากไฟล์ CSV ที่คุณนำเข้า"
+        scope_desc = "วิเคราะห์ข้อมูล สรุปสถิติเชิงลึก และสร้างแผนภูมิจากชุดข้อมูลหรือไฟล์ CSV ที่คุณนำเข้า"
 
     guide_bullets = "\n".join(f"- *\"{g}\"*" for g in guides)
     response_text = (
@@ -165,7 +161,7 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
         }
 
     # ตรวจสอบเจตนา: หากผู้ใช้เจาะจงถามถึง "ชุดข้อมูลที่อัปโหลด" แต่ยังไม่มีตารางที่อัปโหลดเลย
-    upload_intent_keywords = ["ที่อัปโหลด", "ไฟล์ที่อัปโหลด", "ชุดข้อมูลที่อัปโหลด", "ตารางที่อัปโหลด", "ไฟล์ csv"]
+    upload_intent_keywords = ["ที่อัปโหลด", "ไฟล์ที่อัปโหลด", "ชุดข้อมูลที่อัปโหลด", "ตารางที่อัปโหลด", "ไฟล์ csv", "ในชุดข้อมูล"]
     if any(kw in user_query.lower() for kw in upload_intent_keywords):
         uploaded_tables = get_uploaded_tables()
         if not uploaded_tables:
@@ -175,13 +171,14 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
                 "response": (
                     "ขณะนี้ยังไม่มีชุดข้อมูลที่ถูกอัปโหลดเข้ามาในระบบครับ\n\n"
                     "💡 **คำแนะนำ**: ท่านสามารถคลิกปุ่ม **`+`** ด้านล่างกล่องข้อความเพื่อนำเข้าไฟล์ CSV ของคุณ "
-                    "หรือหากต้องการทดสอบระบบ สามารถสอบถามชุดข้อมูลจำลอง (Mock Data: สินค้า, ลูกค้า, คำสั่งซื้อ) ได้ทันทีครับ"
+                    "(เช่น ข้อมูลงบประมาณ, การเงิน, สถานที่ท่องเที่ยว/ร้านอาหาร หรือชุดข้อมูลอื่นๆ) เพื่อเริ่มต้นการวิเคราะห์ได้ทันทีครับ"
                 ),
                 "visualization": None,
                 "data": [],
                 "follow_up_questions": [
-                    "สรุปภาพรวมยอดขายและสินค้าตัวอย่าง",
-                    "แสดงสินค้า 5 อันดับแรกที่มีราคาสูงสุด",
+                    "นำเข้าไฟล์ CSV เพื่อเริ่มวิเคราะห์ (+)",
+                    "สรุปภาพรวมและสถิติสำคัญของข้อมูล",
+                    "แจกแจงจำนวนรายการตามแต่ละหมวดหมู่",
                 ],
             }
 
@@ -207,7 +204,10 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
             "response": f"ขออภัยครับ ไม่สามารถเชื่อมต่อกับ AI เพื่อแปลคำถามเป็น SQL ได้ ({str(e)})",
             "visualization": None,
             "data": [],
-            "follow_up_questions": ["แสดงรายชื่อสินค้าทั้งหมด", "สรุปยอดขายรวมของสินค้าแต่ละชิ้น"],
+            "follow_up_questions": [
+                "แสดงข้อมูลทั้งหมดในชุดข้อมูล",
+                "สรุปภาพรวมและสถิติสำคัญของข้อมูล",
+            ],
         }
 
     # กรณี AI ส่งสัญญาณว่าคำถามอยู่นอกขอบเขต (Zero Hallucination) หรือไม่ได้สร้างคำสั่ง SQL
@@ -256,12 +256,12 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
         else:
             break
 
-    uploaded_tables = get_uploaded_tables()
-    default_fallbacks = (
-        [f"แสดงข้อมูลทั้งหมดในตาราง {uploaded_tables[0]}", f"สรุปภาพรวมในตาราง {uploaded_tables[0]}"]
-        if uploaded_tables
-        else ["สรุปภาพรวมยอดขายและสินค้าตัวอย่าง", "แสดงสินค้า 5 อันดับแรกที่มีราคาสูงสุด"]
-    )
+    default_fallbacks = [
+        "แสดงข้อมูลทั้งหมดในชุดข้อมูล",
+        "สรุปภาพรวมและสถิติสำคัญของข้อมูล",
+        "แจกแจงจำนวนรายการตามแต่ละหมวดหมู่",
+        "ค้นหา 5 อันดับแรกที่มีค่ามากที่สุด",
+    ]
 
     if not sandbox_result or sandbox_result.get("status") != "success":
         return {

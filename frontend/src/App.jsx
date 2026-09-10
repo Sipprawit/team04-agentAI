@@ -41,9 +41,10 @@ const LOCAL_STORAGE_PANEL_WIDTH_KEY = 'team04_analytics_panel_width_v4';
 
 const DEFAULT_SUGGESTED_QUERIES = [
   'นำเข้าไฟล์ CSV เพื่อเริ่มวิเคราะห์ (+)',
-  'สรุปภาพรวมยอดขายและสินค้าตัวอย่าง',
-  'แสดงสินค้า 5 อันดับแรกที่มีราคาสูงสุด',
-  'แจกแจงจำนวนคำสั่งซื้อแยกตามลูกค้า',
+  'แสดงข้อมูลทั้งหมดในชุดข้อมูล',
+  'สรุปภาพรวมและสถิติสำคัญของข้อมูล',
+  'แจกแจงจำนวนรายการตามแต่ละหมวดหมู่',
+  'ค้นหา 5 อันดับแรกที่มีค่ามากที่สุด',
 ];
 
 const LOADING_STAGES = [
@@ -243,7 +244,7 @@ export default function App() {
             ([_name, info]) => !info.is_system && !info.is_mock
           );
           if (uploadedEntries.length > 0) {
-            const [firstTableName, firstTableInfo] = uploadedEntries[0];
+            const [_firstTableName, firstTableInfo] = uploadedEntries[0];
             const previewCols = firstTableInfo.columns ? firstTableInfo.columns.map(c => c.name) : [];
             const ignoredCols = ['id', 'ลำดับ', 'ที่ตั้ง', 'โทรศัพท์', 'อีเมลล์', 'เว็บไซต์', 'link', 'url', 'phone', 'address', 'desc', 'description'];
             const bestCatCol = previewCols.find(c => {
@@ -252,14 +253,15 @@ export default function App() {
             }) || previewCols.find(c => !ignoredCols.some(ign => c.toLowerCase().includes(ign))) || '';
 
             const breakdownQuery = bestCatCol
-              ? `แจกแจงจำนวนรายการตามแต่ละ${bestCatCol}ในตาราง ${firstTableName}`
-              : `แจกแจงจำนวนรายการตามแต่ละหมวดหมู่ในตาราง ${firstTableName}`;
+              ? `แจกแจงจำนวนรายการตามแต่ละ${bestCatCol}`
+              : 'แจกแจงจำนวนรายการตามแต่ละหมวดหมู่';
 
             setSuggestedQueries([
-              `แสดงข้อมูลทั้งหมดในตาราง ${firstTableName}`,
+              'แสดงข้อมูลทั้งหมดในชุดข้อมูล',
+              'สรุปภาพรวมและสถิติสำคัญของข้อมูล',
               breakdownQuery,
-              `สรุปภาพรวมและสถิติสำคัญในตาราง ${firstTableName}`,
-              `ค้นหา 5 อันดับแรกในตาราง ${firstTableName}`,
+              'ค้นหา 5 อันดับแรกที่มีค่ามากที่สุด',
+              'แสดงข้อมูล 10 รายการแรก',
             ]);
           }
         }
@@ -665,14 +667,15 @@ export default function App() {
     }) || previewCols.find(c => !ignoredCols.some(ign => c.toLowerCase().includes(ign))) || '';
 
     const breakdownQuery = bestCatCol
-      ? `แจกแจงจำนวนรายการตามแต่ละ${bestCatCol}ในตาราง ${res.table_name}`
-      : `แจกแจงจำนวนรายการตามแต่ละหมวดหมู่ในตาราง ${res.table_name}`;
+      ? `แจกแจงจำนวนรายการตามแต่ละ${bestCatCol}`
+      : 'แจกแจงจำนวนรายการตามแต่ละหมวดหมู่';
 
     setSuggestedQueries([
-      `แสดงข้อมูลทั้งหมดในตาราง ${res.table_name}`,
+      'แสดงข้อมูลทั้งหมดในชุดข้อมูล',
+      'สรุปภาพรวมและสถิติสำคัญของข้อมูล',
       breakdownQuery,
-      `สรุปภาพรวมและสถิติสำคัญในตาราง ${res.table_name}`,
-      `ค้นหา 5 อันดับแรกในตาราง ${res.table_name}`,
+      'ค้นหา 5 อันดับแรกที่มีค่ามากที่สุด',
+      'แสดงข้อมูล 10 รายการแรก',
     ]);
 
     setToast({
