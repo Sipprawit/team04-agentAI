@@ -57,3 +57,24 @@ class TestNLTranslator:
         raw = "ขออภัยครับ ระบบไม่สามารถตอบคำถามเกี่ยวกับสภาพอากาศได้"
         assert clean_extracted_sql(raw) == "[OUT_OF_SCOPE]"
 
+    def test_query_endpoint_no_uploaded_file_guard(self):
+        from fastapi.testclient import TestClient
+        from main import app
+        client = TestClient(app)
+        res = client.post("/query", json={"q": "แสดงข้อมูลทั้งหมด"})
+        assert res.status_code == 200
+        data = res.json()
+        assert "ขณะนี้ยังไม่มีชุดข้อมูลหรือไฟล์ที่ถูกนำเข้าในระบบครับ" in data["response"]
+        assert data["sql"] == ""
+        assert len(data["data"]) == 0
+
+    def test_query_endpoint_out_of_scope_guard(self):
+        from fastapi.testclient import TestClient
+        from main import app
+        client = TestClient(app)
+        res = client.post("/query", json={"q": "อากาศวันนี้เป็นยังไง"})
+        assert res.status_code == 200
+        data = res.json()
+        assert "ขออภัยครับ ระบบนี้ออกแบบมาเพื่อ" in data["response"]
+        assert data["sql"] == ""
+

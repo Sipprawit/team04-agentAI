@@ -176,6 +176,7 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
     if not uploaded_tables:
         # อนุญาตเฉพาะเมื่อผู้ใช้ระบุคำว่า "mock" หรือ "จำลอง" โดยตรงเท่านั้น
         # ห้ามใช้คำทั่วไปอย่าง "สินค้า", "ลูกค้า", "คำสั่งซื้อ" เพราะผู้ใช้อาจตั้งใจถามถึงไฟล์จริงของตนเอง
+        q_lower = user_query.lower()
         mock_intent_keywords = [
             "mock", "ข้อมูลจำลอง", "ชุดข้อมูลจำลอง", "ข้อมูลตัวอย่าง", "ทดสอบระบบจำลอง"
         ]
