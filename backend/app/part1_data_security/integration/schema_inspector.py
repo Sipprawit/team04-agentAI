@@ -5,14 +5,26 @@ EXCLUDED_TABLES = {"audit_logs", "sqlite_sequence", "chat_sessions", "chat_messa
 MOCK_TABLES = {"customers", "products", "orders"}
 
 
+def _is_test_or_system_table(table_name: str) -> bool:
+    """ตรวจสอบว่าเป็นตารางระบบหรือตารางทดสอบชั่วคราวหรือไม่"""
+    return (
+        table_name in EXCLUDED_TABLES
+        or table_name.startswith("test_")
+        or table_name.startswith("benchmark_")
+    )
+
+
 def get_uploaded_tables() -> list:
     """
-    ดึงรายชื่อตารางที่ผู้ใช้อัปโหลดเข้ามาจริง (ไม่รวมตารางระบบและตาราง mock data)
+    ดึงรายชื่อตารางที่ผู้ใช้อัปโหลดเข้ามาจริง (ไม่รวมตารางระบบ, ตารางทดสอบ และตาราง mock data)
     """
     try:
         inspector = inspect(engine)
         tables = inspector.get_table_names()
-        return [t for t in tables if t not in EXCLUDED_TABLES and t not in MOCK_TABLES]
+        return [
+            t for t in tables
+            if not _is_test_or_system_table(t) and t not in MOCK_TABLES
+        ]
     except Exception:
         return []
 
@@ -32,7 +44,7 @@ def get_database_schema_info(exclude_system_tables: bool = True) -> str:
 
         with engine.connect() as conn:
             for table_name in tables:
-                if exclude_system_tables and table_name in EXCLUDED_TABLES:
+                if exclude_system_tables and _is_test_or_system_table(table_name):
                     continue
 
                 # 1. คอลัมน์และชนิดข้อมูล
@@ -70,8 +82,8 @@ def get_database_schema_info(exclude_system_tables: bool = True) -> str:
                 "=== ตารางข้อมูลที่ผู้ใช้อัปโหลดเข้ามา (User Uploaded Datasets - สำคัญที่สุด / ใช้เป็นหลัก) ===\n"
                 + "\n\n".join(uploaded_text)
             )
-
-        if mock_text:
+        elif mock_text:
+            # รวมตาราง mock เฉพาะกรณีที่ยังไม่มีตารางที่ผู้ใช้อัปโหลดเข้ามาเท่านั้น (สำหรับการทดสอบระบบ)
             output_sections.append(
                 "=== ตารางข้อมูลตัวอย่างจำลองระบบ (Default Mock Tables) ===\n"
                 + "\n\n".join(mock_text)
@@ -117,9 +129,9 @@ def get_schema_dict() -> dict:
                     "columns": columns,
                     "foreign_keys": fks,
                     "row_count": row_count,
-                    "is_system": table_name in EXCLUDED_TABLES,
+                    "is_system": _is_test_or_system_table(table_name),
                     "is_mock": table_name in MOCK_TABLES,
-                    "is_uploaded": (table_name not in EXCLUDED_TABLES and table_name not in MOCK_TABLES),
+                    "is_uploaded": (not _is_test_or_system_table(table_name) and table_name not in MOCK_TABLES),
                 }
         return result
     except Exception as e:

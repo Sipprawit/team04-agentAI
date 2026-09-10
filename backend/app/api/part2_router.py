@@ -160,28 +160,6 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
             "follow_up_questions": ["แสดงรายชื่อสินค้าทั้งหมด", "แสดงรายการคำสั่งซื้อล่าสุด"],
         }
 
-    # ตรวจสอบเจตนา: หากผู้ใช้เจาะจงถามถึง "ชุดข้อมูลที่อัปโหลด" แต่ยังไม่มีตารางที่อัปโหลดเลย
-    upload_intent_keywords = ["ที่อัปโหลด", "ไฟล์ที่อัปโหลด", "ชุดข้อมูลที่อัปโหลด", "ตารางที่อัปโหลด", "ไฟล์ csv", "ในชุดข้อมูล"]
-    if any(kw in user_query.lower() for kw in upload_intent_keywords):
-        uploaded_tables = get_uploaded_tables()
-        if not uploaded_tables:
-            return {
-                "query": user_query,
-                "sql": "",
-                "response": (
-                    "ขณะนี้ยังไม่มีชุดข้อมูลที่ถูกอัปโหลดเข้ามาในระบบครับ\n\n"
-                    "💡 **คำแนะนำ**: ท่านสามารถคลิกปุ่ม **`+`** ด้านล่างกล่องข้อความเพื่อนำเข้าไฟล์ CSV ของคุณ "
-                    "(เช่น ข้อมูลงบประมาณ, การเงิน, สถานที่ท่องเที่ยว/ร้านอาหาร หรือชุดข้อมูลอื่นๆ) เพื่อเริ่มต้นการวิเคราะห์ได้ทันทีครับ"
-                ),
-                "visualization": None,
-                "data": [],
-                "follow_up_questions": [
-                    "นำเข้าไฟล์ CSV เพื่อเริ่มวิเคราะห์ (+)",
-                    "สรุปภาพรวมและสถิติสำคัญของข้อมูล",
-                    "แจกแจงจำนวนรายการตามแต่ละหมวดหมู่",
-                ],
-            }
-
     # ตรวจจับคำถามนอกขอบเขตข้อมูลโดยสิ้นเชิง (Fast-path Out-of-Scope Guardrails)
     out_of_scope_patterns = [
         "อากาศ", "พยากรณ์อากาศ", "ฝนตก", "อุณหภูมิ",
@@ -192,6 +170,35 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
     ]
     if any(p in user_query.lower() for p in out_of_scope_patterns):
         return _create_out_of_scope_response(user_query)
+
+    # ตรวจสอบสถานะชุดข้อมูล: หากยังไม่มีการอัปโหลดไฟล์ CSV เข้ามาในระบบ
+    uploaded_tables = get_uploaded_tables()
+    if not uploaded_tables:
+        # อนุญาตให้เข้าถึง mock data เฉพาะเมื่อผู้ใช้ระบุเจตนาชัดเจนว่าต้องการทดสอบด้วยชุดข้อมูลจำลอง
+        q_lower = user_query.lower()
+        mock_intent_keywords = [
+            "mock", "จำลอง", "ทดสอบระบบ", "ตัวอย่างระบบ",
+            "ลูกค้า", "คำสั่งซื้อ", "สินค้า",
+            "customers", "products", "orders"
+        ]
+        is_explicit_mock_intent = any(kw in q_lower for kw in mock_intent_keywords)
+
+        if not is_explicit_mock_intent:
+            return {
+                "query": user_query,
+                "sql": "",
+                "response": (
+                    "ขณะนี้ยังไม่มีชุดข้อมูลหรือไฟล์ที่ถูกนำเข้าในระบบครับ\n\n"
+                    "💡 **คำแนะนำ**: กรุณาคลิกปุ่ม **`+`** ด้านล่างกล่องข้อความเพื่อนำเข้าไฟล์ CSV ของคุณ "
+                    "(เช่น ข้อมูลงบประมาณ, ข้อมูลการเงิน, ข้อมูลสถานที่ท่องเที่ยว/ร้านอาหาร หรือชุดข้อมูลอื่นๆ ที่ต้องการวิเคราะห์) "
+                    "เพื่อเริ่มต้นการค้นหาและสร้างแผนภูมิรายงานได้ทันทีครับ"
+                ),
+                "visualization": None,
+                "data": [],
+                "follow_up_questions": [
+                    "นำเข้าไฟล์ CSV เพื่อเริ่มวิเคราะห์ (+)",
+                ],
+            }
 
     # 1. แปลงคำถามเป็น SQL (Part 2)
     try:
