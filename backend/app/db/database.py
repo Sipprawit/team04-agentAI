@@ -3,9 +3,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # ตั้งค่า Database URL สำหรับ SQLite
-# บันทึกไฟล์ test.db ไว้ที่ root ของ backend/
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SQLALCHEMY_DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'test.db')}"
+db_path = os.getenv("SQLITE_DB_PATH")
+if not db_path:
+    db_path = os.path.join(BASE_DIR, "test.db")
+else:
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{db_path}"
 
 # สร้าง Engine (check_same_thread=False จำเป็นสำหรับ SQLite ใน FastAPI)
 engine = create_engine(

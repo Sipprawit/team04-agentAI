@@ -174,12 +174,10 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
     # ตรวจสอบสถานะชุดข้อมูล: หากยังไม่มีการอัปโหลดไฟล์ CSV เข้ามาในระบบ
     uploaded_tables = get_uploaded_tables()
     if not uploaded_tables:
-        # อนุญาตให้เข้าถึง mock data เฉพาะเมื่อผู้ใช้ระบุเจตนาชัดเจนว่าต้องการทดสอบด้วยชุดข้อมูลจำลอง
-        q_lower = user_query.lower()
+        # อนุญาตเฉพาะเมื่อผู้ใช้ระบุคำว่า "mock" หรือ "จำลอง" โดยตรงเท่านั้น
+        # ห้ามใช้คำทั่วไปอย่าง "สินค้า", "ลูกค้า", "คำสั่งซื้อ" เพราะผู้ใช้อาจตั้งใจถามถึงไฟล์จริงของตนเอง
         mock_intent_keywords = [
-            "mock", "จำลอง", "ทดสอบระบบ", "ตัวอย่างระบบ",
-            "ลูกค้า", "คำสั่งซื้อ", "สินค้า",
-            "customers", "products", "orders"
+            "mock", "ข้อมูลจำลอง", "ชุดข้อมูลจำลอง", "ข้อมูลตัวอย่าง", "ทดสอบระบบจำลอง"
         ]
         is_explicit_mock_intent = any(kw in q_lower for kw in mock_intent_keywords)
 
