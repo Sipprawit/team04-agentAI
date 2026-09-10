@@ -143,6 +143,19 @@ def format_visualization_payload(data: list) -> dict:
 
         chart_data.append(entry)
 
+    # กรณี Pie Chart: กรองข้อมูลที่มีค่า <= 0 ออก เพราะ Pie Chart ไม่ควรมีชิ้นที่ไม่มีค่า
+    if chart_type == "pie":
+        pie_data = [d for d in chart_data if d.get("value", 0) > 0]
+        pie_labels = [labels[i] for i, v in enumerate(values) if v > 0]
+        pie_values = [v for v in values if v > 0]
+        # ถ้าหลังกรองเหลือน้อยกว่า 2 ชิ้น ไม่คุ้มแสดง Pie → ใช้ bar แทน
+        if len(pie_data) < 2:
+            chart_type = "bar"
+        else:
+            chart_data = pie_data
+            labels = pie_labels
+            values = pie_values
+
     result = {
         "recommended_chart": chart_type,
         "x_axis_key": x_axis_key,

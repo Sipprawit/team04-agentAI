@@ -229,19 +229,27 @@ export default function ChartRenderer({ visualization }) {
           </ResponsiveContainer>
         )}
 
-        {selectedChartType === 'pie' && (
+        {selectedChartType === 'pie' && (() => {
+          // กรองข้อมูลที่มีค่า <= 0 ออก เพราะ Pie Chart ไม่ควรมีชิ้นที่ไม่มีค่า
+          const pieData = data.filter(d => (d.value || 0) > 0);
+          if (pieData.length < 2) return null;
+          return (
           <ResponsiveContainer>
             <PieChart>
               <Pie
-                data={data}
+                data={pieData}
                 dataKey="value"
                 nameKey="name"
                 cx="50%"
                 cy="48%"
                 outerRadius={85}
-                label={({ name, percent }) => `${name.length > 15 ? name.slice(0, 15) + '...' : name} (${(percent * 100).toFixed(0)}%)`}
+                label={({ name, value, percent }) => {
+                  const shortName = name.length > 15 ? name.slice(0, 15) + '...' : name;
+                  const fmtVal = typeof value === 'number' ? value.toLocaleString() : value;
+                  return `${shortName} (${(percent * 100).toFixed(1)}%, ${fmtVal})`;
+                }}
               >
-                {data.map((entry, index) => (
+                {pieData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
@@ -249,7 +257,8 @@ export default function ChartRenderer({ visualization }) {
               <Legend verticalAlign="bottom" height={36} />
             </PieChart>
           </ResponsiveContainer>
-        )}
+          );
+        })()}
 
         {selectedChartType === 'area' && (
           <ResponsiveContainer>
