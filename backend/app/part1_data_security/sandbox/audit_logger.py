@@ -68,14 +68,26 @@ def get_audit_logs(limit: int = 50, status_filter: str = None) -> list:
 
 
 def get_audit_stats() -> dict:
-    """สรุปสถิติ Audit Logs (จำนวนทั้งหมด, สำเร็จ, ผิดพลาด)"""
+    """สรุปสถิติ Audit Logs (จำนวนทั้งหมด, สำเร็จ, ผิดพลาด, และอัตราการซ่อมแซมคำสั่งสำเร็จ)"""
     try:
         init_audit_log_table()
         with engine.connect() as conn:
             total = conn.execute(text("SELECT COUNT(*) FROM audit_logs")).scalar() or 0
             success = conn.execute(text("SELECT COUNT(*) FROM audit_logs WHERE status = 'success'")).scalar() or 0
             error = conn.execute(text("SELECT COUNT(*) FROM audit_logs WHERE status = 'error'")).scalar() or 0
-            return {"total": total, "success": success, "error": error}
+            self_healed = conn.execute(text("SELECT COUNT(*) FROM audit_logs WHERE status = 'self_healed'")).scalar() or 0
+
+            # Recovery Rate คำนวณจากคำสั่งที่ผ่านการซ่อมแซมสำเร็จ
+            healing_opportunities = error + self_healed
+            recovery_rate = round((self_healed / healing_opportunities) * 100, 1) if healing_opportunities > 0 else 100.0
+
+            return {
+                "total": total,
+                "success": success,
+                "error": error,
+                "self_healed": self_healed,
+                "recovery_rate_pct": recovery_rate
+            }
     except Exception as e:
         print(f"[AuditLogger Error] {e}")
-        return {"total": 0, "success": 0, "error": 0}
+        return {"total": 0, "success": 0, "error": 0, "self_healed": 0, "recovery_rate_pct": 100.0}

@@ -211,6 +211,74 @@ def _create_out_of_scope_response(query: str) -> dict:
     }
 
 
+def explain_sql_query(sql_query: str) -> str:
+    """
+    สร้างคำอธิบายการทำงานของคำสั่ง SQL เป็นภาษาไทยแบบกระชับ เข้าใจง่าย (Explainable AI)
+    """
+    if not sql_query:
+        return ""
+
+    sql_clean = re.sub(r"\s+", " ", sql_query.strip())
+    sql_upper = sql_clean.upper()
+
+    from_match = re.search(r'FROM\s+["`\']?([a-zA-Z0-9_\u0E00-\u0E7F]+)["`\']?', sql_clean, re.IGNORECASE)
+    tbl_name = from_match.group(1) if from_match else "ตารางข้อมูล"
+
+    limit_match = re.search(r"LIMIT\s+(\d+)", sql_upper)
+    limit_num = limit_match.group(1) if limit_match else None
+
+    group_match = re.search(r'GROUP\s+BY\s+["`\']?([a-zA-Z0-9_\u0E00-\u0E7F]+)["`\']?', sql_clean, re.IGNORECASE)
+    group_col = group_match.group(1) if group_match else None
+
+    order_match = re.search(r'ORDER\s+BY\s+["`\']?([a-zA-Z0-9_\u0E00-\u0E7F()]+)["`\']?\s*(DESC|ASC)?', sql_clean, re.IGNORECASE)
+    order_col = order_match.group(1) if order_match else None
+    order_dir = order_match.group(2).upper() if (order_match and order_match.group(2)) else "ASC"
+
+    has_sum = "SUM(" in sql_upper
+    has_avg = "AVG(" in sql_upper
+    has_count = "COUNT(" in sql_upper
+    has_where = "WHERE " in sql_upper
+    has_join = " JOIN " in sql_upper
+
+    desc_parts = []
+
+    if group_col:
+        if has_count:
+            desc_parts.append(f"จัดกลุ่มนับจำนวนรายการตาม '{group_col}'")
+        elif has_sum:
+            desc_parts.append(f"จัดกลุ่มหายอดรวมตาม '{group_col}'")
+        elif has_avg:
+            desc_parts.append(f"จัดกลุ่มหาค่าเฉลี่ยตาม '{group_col}'")
+        else:
+            desc_parts.append(f"จัดกลุ่มข้อมูลตาม '{group_col}'")
+    elif has_sum or has_avg:
+        calc = []
+        if has_sum:
+            calc.append("ยอดรวม")
+        if has_avg:
+            calc.append("ค่าเฉลี่ย")
+        desc_parts.append(f"คำนวณ{'/'.join(calc)}ของข้อมูล")
+    elif limit_num and not order_col and not has_where:
+        desc_parts.append(f"เรียกดูข้อมูล {limit_num} รายการแรก")
+    else:
+        desc_parts.append("สืบค้นข้อมูล")
+
+    if has_join:
+        desc_parts.append("เชื่อมโยงข้อมูลข้ามตาราง (JOIN)")
+
+    if has_where:
+        desc_parts.append("กรองเฉพาะรายการที่เข้าเงื่อนไข")
+
+    if order_col:
+        direction = "จากมากไปน้อย" if order_dir == "DESC" else "จากน้อยไปมาก"
+        if limit_num:
+            desc_parts.append(f"จัดอันดับตาม '{order_col}' {direction} (เลือก {limit_num} รายการแรก)")
+        else:
+            desc_parts.append(f"เรียงตาม '{order_col}' {direction}")
+
+    return f"{' และ '.join(desc_parts)} จากตาราง '{tbl_name}'"
+
+
 def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
     """
     ฟังก์ชันแกนกลางประมวลผล Pipeline:
@@ -316,9 +384,11 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
     max_retries = 2
     sandbox_result = None
     last_error = ""
+    attempts_used = 0
 
     # 2-4. Agentic Loop: ตรวจ Security + รันใน Sandbox + Self-healing เมื่อเกิดข้อผิดพลาด
     for attempt in range(max_retries + 1):
+        attempts_used = attempt
         # 2. ตรวจสอบความปลอดภัย (Security Validator)
         security = validate_sql_security(sql_query)
         if not security["is_valid"]:
@@ -340,6 +410,12 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
         # 3. รันใน Secure Sandbox (Part 1)
         sandbox_result = execute_sql_in_sandbox(sql_query)
         if sandbox_result["status"] == "success":
+            if attempt > 0:
+                try:
+                    from app.part1_data_security.sandbox.audit_logger import log_execution
+                    log_execution(sql_query, status="self_healed", error_message=None)
+                except Exception:
+                    pass
             break
 
         last_error = sandbox_result.get("message", "Unknown database error")
@@ -377,6 +453,12 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
         empty_res = {
             "query": user_query,
             "sql": sql_query,
+            "sql_explanation": explain_sql_query(sql_query),
+            "confidence": {
+                "score": 0.85 if attempts_used == 0 else 0.75,
+                "level": "high" if attempts_used == 0 else "medium",
+                "label": "ความมั่นใจสูง" if attempts_used == 0 else "ความมั่นใจปานกลาง"
+            },
             "response": "ประมวลผลคำสั่งสำเร็จ แต่ไม่พบข้อมูลที่ตรงกับเงื่อนไขในฐานข้อมูล",
             "visualization": None,
             "data": [],
@@ -402,9 +484,19 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
     # 7. สร้างคำถามแนะนำต่อเนื่อง (Smart Follow-up Questions)
     follow_ups = _generate_follow_up_questions(user_query, sql_query, raw_data)
 
+    confidence_score = 0.95 if attempts_used == 0 else 0.80
+    confidence_level = "high" if attempts_used == 0 else "medium"
+    confidence_label = "ความมั่นใจสูง" if attempts_used == 0 else "ความมั่นใจปานกลาง (ผ่านการซ่อมแซมคำสั่ง)"
+
     result_payload = {
         "query": user_query,
         "sql": sql_query,
+        "sql_explanation": explain_sql_query(sql_query),
+        "confidence": {
+            "score": confidence_score,
+            "level": confidence_level,
+            "label": confidence_label
+        },
         "response": insight_text,
         "visualization": visualization,
         "data": raw_data,

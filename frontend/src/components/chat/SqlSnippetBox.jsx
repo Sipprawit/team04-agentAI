@@ -1,7 +1,7 @@
 ﻿import React, { useState } from 'react';
-import { Code, Copy, Check } from 'lucide-react';
+import { Code, Copy, Check, Sparkles, Info } from 'lucide-react';
 
-export default function SqlSnippetBox({ sql }) {
+export default function SqlSnippetBox({ sql, explanation, confidence }) {
   const [copied, setCopied] = useState(false);
 
   if (!sql) return null;
@@ -25,6 +25,12 @@ export default function SqlSnippetBox({ sql }) {
           <Code size={13} />
           <span>คำสั่ง SQL ที่ใช้ประมวลผล</span>
           <span className="sql-dialect-tag">SQLite</span>
+          {confidence && (
+            <span className={`sql-confidence-tag confidence-${confidence.level}`}>
+              <Sparkles size={10} />
+              <span>{confidence.label}</span>
+            </span>
+          )}
         </div>
         <button
           type="button"
@@ -37,6 +43,12 @@ export default function SqlSnippetBox({ sql }) {
         </button>
       </summary>
       <div className="sql-code-container">
+        {explanation && (
+          <div className="sql-explanation-banner">
+            <Info size={13} className="text-blue-500 flex-shrink-0" />
+            <span>{explanation}</span>
+          </div>
+        )}
         <pre className="sql-code-display">{sql}</pre>
       </div>
     </details>

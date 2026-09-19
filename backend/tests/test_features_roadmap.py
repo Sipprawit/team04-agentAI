@@ -248,3 +248,114 @@ class TestSchemaRelevanceRanking:
         assert isinstance(info, str)
         # ตารางที่ชื่อหรือคอลัมน์ตรงกับคำถามควรได้รับการจัดอันดับ
         assert "customers" in info or "orders" in info
+
+
+class TestSQLExplanationAndConfidence:
+    """ทดสอบระบบสรุปการทำงานของ SQL เป็นภาษาไทย (Explainable AI) และคะแนนความมั่นใจ"""
+
+    def test_explain_sql_simple_query(self):
+        from app.api.part2_router import explain_sql_query
+        sql = 'SELECT * FROM "orders" LIMIT 10;'
+        explanation = explain_sql_query(sql)
+        assert "10 รายการแรก" in explanation
+        assert "orders" in explanation
+
+    def test_explain_sql_aggregations_and_grouping(self):
+        from app.api.part2_router import explain_sql_query
+        sql = 'SELECT category, SUM(amount) FROM "sales" WHERE year = 2026 GROUP BY category ORDER BY SUM(amount) DESC LIMIT 5;'
+        explanation = explain_sql_query(sql)
+        assert "sales" in explanation
+        assert "category" in explanation
+        assert "ยอดรวม" in explanation or "จัดกลุ่ม" in explanation
+        assert "เงื่อนไข" in explanation or "กรอง" in explanation
+        assert "มากไปน้อย" in explanation
+
+    def test_explain_sql_join(self):
+        from app.api.part2_router import explain_sql_query
+        sql = 'SELECT c.name, o.total FROM customers c INNER JOIN orders o ON c.id = o.customer_id;'
+        explanation = explain_sql_query(sql)
+        assert "JOIN" in explanation or "ข้ามตาราง" in explanation
+
+    def test_explain_sql_empty_or_none(self):
+        from app.api.part2_router import explain_sql_query
+        assert explain_sql_query("") == ""
+        assert explain_sql_query(None) == ""
+
+
+class TestRateLimiter:
+    """ทดสอบ Client IP Rate Limiting Middleware"""
+
+    def setup_method(self):
+        from app.core.rate_limiter import clear_rate_limit_history
+        clear_rate_limit_history()
+
+    def test_rate_limiter_allows_under_quota(self):
+        from app.core.rate_limiter import is_rate_limited
+        # ทดสอบส่ง 10 requests ติดต่อกัน (โควตา 45)
+        for _ in range(10):
+            blocked, wait_sec = is_rate_limited("192.168.1.50")
+            assert not blocked
+            assert wait_sec == 0
+
+    def test_rate_limiter_blocks_exceeding_quota(self):
+        from app.core.rate_limiter import is_rate_limited, RATE_LIMIT_PER_MINUTE
+        ip = "192.168.1.99"
+        # ส่งจนเต็มโควตา
+        for _ in range(RATE_LIMIT_PER_MINUTE):
+            blocked, _ = is_rate_limited(ip)
+            assert not blocked
+
+        # ครั้งถัดไปต้องถูก block
+        blocked, wait_sec = is_rate_limited(ip)
+        assert blocked
+        assert wait_sec > 0
+
+    def test_rate_limiter_different_ips_isolated(self):
+        from app.core.rate_limiter import is_rate_limited, RATE_LIMIT_PER_MINUTE
+        ip_a = "10.0.0.1"
+        ip_b = "10.0.0.2"
+
+        # เติม ip_a จนเต็ม
+        for _ in range(RATE_LIMIT_PER_MINUTE):
+            is_rate_limited(ip_a)
+
+        # ip_a ถูก block แต่ ip_b ต้องยังใช้งานได้ตามปกติ
+        blocked_a, _ = is_rate_limited(ip_a)
+        blocked_b, _ = is_rate_limited(ip_b)
+        assert blocked_a is True
+        assert blocked_b is False
+
+
+class TestAuditLoggerRecoveryRate:
+    """ทดสอบการบันทึกสถานะ self_healed และการคำนวณ Recovery Rate ใน Audit Logger"""
+
+    def test_audit_stats_structure(self):
+        from app.part1_data_security.sandbox.audit_logger import get_audit_stats
+        stats = get_audit_stats()
+        assert "total" in stats
+        assert "success" in stats
+        assert "error" in stats
+        assert "self_healed" in stats
+        assert "recovery_rate_pct" in stats
+        assert 0.0 <= stats["recovery_rate_pct"] <= 100.0
+
+    def test_log_execution_self_healed(self):
+        from app.part1_data_security.sandbox.audit_logger import log_execution, get_audit_stats
+        initial_stats = get_audit_stats()
+        initial_healed = initial_stats.get("self_healed", 0)
+
+        log_execution("SELECT 1 FROM sqlite_master;", status="self_healed", error_message=None)
+
+        new_stats = get_audit_stats()
+        assert new_stats.get("self_healed", 0) == initial_healed + 1
+
+
+class TestMultiTableJoinPrompt:
+    """ทดสอบ Few-Shot Prompting สำหรับการเชื่อมโยงหลายตาราง (Multi-Table JOIN)"""
+
+    def test_prompt_includes_join_guidelines(self):
+        from app.part2_ai_core.translator.sql_prompt_builder import build_sql_prompt
+        prompt = build_sql_prompt("สรุปยอดขายแยกตามลูกค้า")
+        assert "Multi-Table JOIN" in prompt or "JOIN" in prompt
+        assert "Foreign Key" in prompt or "Foreign Keys" in prompt
+

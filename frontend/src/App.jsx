@@ -284,6 +284,8 @@ export default function App() {
             isUploadNotice: !!m.metadata?.uploadData,
             uploadData: m.metadata?.uploadData || null,
             sql: m.metadata?.sql || null,
+            sqlExplanation: m.metadata?.sqlExplanation || null,
+            confidence: m.metadata?.confidence || null,
             visualization: m.metadata?.visualization || null,
             rawData: m.metadata?.rawData || [],
             followUpQuestions: m.metadata?.followUpQuestions || [],
@@ -426,6 +428,8 @@ export default function App() {
         userQuery: userMessage.text,
         text: data.response || 'ประมวลผลข้อมูลเรียบร้อยแล้ว',
         sql: data.sql || null,
+        sqlExplanation: data.sql_explanation || null,
+        confidence: data.confidence || null,
         visualization: data.visualization || null,
         rawData: data.data || [],
         followUpQuestions: data.follow_up_questions || [],
@@ -443,6 +447,8 @@ export default function App() {
         content: aiMessage.text,
         metadata: {
           sql: aiMessage.sql,
+          sqlExplanation: aiMessage.sqlExplanation,
+          confidence: aiMessage.confidence,
           visualization: aiMessage.visualization,
           rawData: aiMessage.rawData,
           followUpQuestions: aiMessage.followUpQuestions,
@@ -865,7 +871,11 @@ export default function App() {
 
                     {/* SQL Query Collapsible Snippet with Copy Button */}
                     {msg.role === 'ai' && msg.sql && !msg.isUploadNotice && (
-                      <SqlSnippetBox sql={msg.sql} />
+                      <SqlSnippetBox
+                        sql={msg.sql}
+                        explanation={msg.sqlExplanation}
+                        confidence={msg.confidence}
+                      />
                     )}
 
                     {/* Action Bar: View Table, Export CSV & Pin to Dashboard */}

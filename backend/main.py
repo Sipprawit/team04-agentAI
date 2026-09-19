@@ -10,6 +10,7 @@ load_dotenv()
 
 from app.core.config import settings
 from app.db.database import init_db
+from app.core.rate_limiter import ClientRateLimitMiddleware
 from app.api.part1_router import router as part1_router
 from app.api.part2_router import router as part2_router
 from app.api.part3_router import router as part3_router
@@ -53,6 +54,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ติดตั้ง Client IP Rate Limiting Middleware ป้องกัน API สแปม
+app.add_middleware(ClientRateLimitMiddleware)
 
 # 3. Global Exception Handler (ดักจับ Error ไม่ให้เซิร์ฟเวอร์ร่วงและพ่น JSON สวยๆ กลับไปให้หน้าบ้าน)
 @app.exception_handler(Exception)

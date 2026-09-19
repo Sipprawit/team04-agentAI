@@ -848,6 +848,49 @@ body {
   text-transform: uppercase;
 }
 
+.sql-confidence-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.sql-confidence-tag.confidence-high {
+  background-color: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.sql-confidence-tag.confidence-medium {
+  background-color: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
+}
+
+.sql-confidence-tag.confidence-low {
+  background-color: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.sql-explanation-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background-color: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: #0369a1;
+  line-height: 1.45;
+}
+
 .sql-copy-btn {
   display: inline-flex;
   align-items: center;
@@ -1391,6 +1434,44 @@ body {
   background: #ffffff;
   color: var(--primary-600);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.chart-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chart-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--slate-600);
+  background-color: var(--slate-100);
+  border: 1px solid var(--slate-200);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chart-export-btn:hover:not(:disabled) {
+  background-color: var(--slate-200);
+  color: var(--slate-900);
+  border-color: var(--slate-300);
+}
+
+.chart-export-btn.success {
+  background-color: #ecfdf5;
+  color: #059669;
+  border-color: #a7f3d0;
+}
+
+.chart-export-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .chart-render-box {
