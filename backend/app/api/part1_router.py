@@ -50,10 +50,60 @@ async def upload_csv(file: UploadFile = File(...), table_name: str = Form(...)):
             pass
 
         result["preview_data"] = preview_rows
+
+        # ล้าง Query Cache เมื่อมีการนำเข้าชุดข้อมูลใหม่
+        from app.api.part2_router import clear_query_cache
+        clear_query_cache()
+
         return result
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
+
+
+@router.delete("/tables/{table_name}")
+async def delete_dataset_table(table_name: str):
+    """
+    ลบชุดข้อมูลตารางที่ผู้ใช้อัปโหลดเข้ามา (Dataset Deletion & Cleanup)
+    - ป้องกันความปลอดภัย: ห้ามลบตาราง mock หรือตารางระบบของแอปพลิเคชัน
+    - ลบตารางออกจากฐานข้อมูล SQLite
+    - เคลียร์ In-Memory Query Cache
+    """
+    clean_name = sanitize_identifier(table_name)
+    protected_tables = {
+        "customers", "products", "orders", "chat_sessions", "chat_messages", "pinned_items"
+    }
+    if clean_name.lower() in protected_tables:
+        raise HTTPException(
+            status_code=403,
+            detail=f"ไม่สามารถลบตารางระบบหรือตารางตัวอย่าง '{clean_name}' ได้"
+        )
+
+    try:
+        with engine.connect() as conn:
+            check = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name=:name;"),
+                {"name": clean_name}
+            ).fetchone()
+            if not check:
+                raise HTTPException(status_code=404, detail=f"ไม่พบชุดข้อมูลตาราง '{clean_name}' ในระบบ")
+
+            conn.execute(text(f'DROP TABLE IF EXISTS "{clean_name}";'))
+            conn.commit()
+
+        # ล้าง Query Cache เพื่อป้องกันการส่งผลลัพธ์เก่าของตารางที่ถูกลบ
+        from app.api.part2_router import clear_query_cache
+        clear_query_cache()
+
+        return {
+            "status": "success",
+            "message": f"ลบชุดข้อมูล '{clean_name}' ออกจากระบบเรียบร้อยแล้ว",
+            "table_name": clean_name
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาดในการลบชุดข้อมูล: {str(e)}")
 
 
 @router.get("/tables/{table_name}/preview")

@@ -5,7 +5,6 @@ import {
   Bot,
   User,
   Plus,
-  Code,
   Pin,
   AlertCircle,
   RefreshCw,
@@ -30,6 +29,7 @@ import { pinItemToDashboard, unpinItem } from './services/dashboardService';
 import ChatHistorySidebar from './components/chat/ChatHistorySidebar';
 import AnalyticsPanel from './components/dashboard/AnalyticsPanel';
 import MarkdownMessage from './components/chat/MarkdownMessage';
+import SqlSnippetBox from './components/chat/SqlSnippetBox';
 import FileUploadModal from './components/upload/FileUploadModal';
 import Toast from './components/common/Toast';
 import './App.css';
@@ -839,15 +839,9 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* SQL Query Collapsible Snippet */}
+                    {/* SQL Query Collapsible Snippet with Copy Button */}
                     {msg.role === 'ai' && msg.sql && !msg.isUploadNotice && (
-                      <details className="sql-snippet-box">
-                        <summary>
-                          <Code size={13} />
-                          <span>คำสั่ง SQL ที่ใช้ประมวลผล</span>
-                        </summary>
-                        <pre className="sql-code-display">{msg.sql}</pre>
-                      </details>
+                      <SqlSnippetBox sql={msg.sql} />
                     )}
 
                     {/* Action Bar: View Table, Export CSV & Pin to Dashboard */}

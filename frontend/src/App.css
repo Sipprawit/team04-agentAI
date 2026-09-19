@@ -805,35 +805,92 @@ body {
   margin-top: 10px;
   background-color: var(--slate-50);
   border: 1px solid var(--slate-200);
-  border-radius: 6px;
-  padding: 6px 10px;
+  border-radius: 8px;
+  padding: 8px 12px;
   font-size: 0.8rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sql-snippet-box[open] {
+  background-color: #f8fafc;
+  border-color: var(--slate-300);
 }
 
 .sql-snippet-box summary {
   cursor: pointer;
-  color: var(--slate-500);
+  color: var(--slate-600);
   font-weight: 500;
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
   user-select: none;
+  list-style: none;
 }
 
-.sql-snippet-box summary:hover {
+.sql-snippet-box summary::-webkit-details-marker {
+  display: none;
+}
+
+.sql-snippet-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sql-dialect-tag {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  background-color: #e0f2fe;
+  color: #0284c7;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.sql-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--slate-500);
+  background: var(--white);
+  border: 1px solid var(--slate-200);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sql-copy-btn:hover {
   color: var(--primary-600);
+  border-color: var(--primary-300);
+  background-color: var(--primary-50, #f0fdf4);
+}
+
+.sql-copy-btn.copied {
+  color: #16a34a;
+  border-color: #86efac;
+  background-color: #f0fdf4;
+}
+
+.sql-code-container {
+  margin-top: 8px;
+  position: relative;
 }
 
 .sql-code-display {
-  margin-top: 6px;
-  padding: 8px 10px;
+  margin: 0;
+  padding: 10px 12px;
   background-color: var(--slate-900);
   color: #38bdf8;
   border-radius: 6px;
   overflow-x: auto;
   font-family: 'Consolas', 'Courier New', monospace;
   font-size: 0.78rem;
-  line-height: 1.4;
+  line-height: 1.45;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .message-actions-bar {

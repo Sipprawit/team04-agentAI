@@ -1,0 +1,44 @@
+﻿import React, { useState } from 'react';
+import { Code, Copy, Check } from 'lucide-react';
+
+export default function SqlSnippetBox({ sql }) {
+  const [copied, setCopied] = useState(false);
+
+  if (!sql) return null;
+
+  const handleCopy = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(sql);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback
+    }
+  };
+
+  return (
+    <details className="sql-snippet-box">
+      <summary>
+        <div className="sql-snippet-summary-left">
+          <Code size={13} />
+          <span>คำสั่ง SQL ที่ใช้ประมวลผล</span>
+          <span className="sql-dialect-tag">SQLite</span>
+        </div>
+        <button
+          type="button"
+          className={`sql-copy-btn ${copied ? 'copied' : ''}`}
+          onClick={handleCopy}
+          title={copied ? 'คัดลอกเรียบร้อยแล้ว' : 'คัดลอกคำสั่ง SQL'}
+        >
+          {copied ? <Check size={12} /> : <Copy size={12} />}
+          <span>{copied ? 'คัดลอกแล้ว' : 'คัดลอก SQL'}</span>
+        </button>
+      </summary>
+      <div className="sql-code-container">
+        <pre className="sql-code-display">{sql}</pre>
+      </div>
+    </details>
+  );
+}

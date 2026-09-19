@@ -155,6 +155,56 @@ def validate_file_size(file_path: str) -> bool:
     return size_mb <= MAX_FILE_SIZE_MB
 
 
+def detect_pii(headers: list, rows: list) -> list:
+    """
+    ตรวจจับข้อมูลส่วนบุคคลที่ละเอียดอ่อน (Personally Identifiable Information: PII)
+    เช่น เลขบัตรประจำตัวประชาชน, เบอร์โทรศัพท์, หรืออีเมล
+    คืนค่ารายการประเภท PII และคอลัมน์ที่ตรวจพบเพื่อแจ้งเตือนผู้ใช้งาน
+    """
+    warnings = []
+    id_card_regex = re.compile(r'^\d{13}$|^\d{1}-\d{4}-\d{5}-\d{2}-\d{1}$')
+    phone_regex = re.compile(r'^0[2689]\d{7,8}$|^0[2689]-\d{3,4}-\d{4}$')
+    email_regex = re.compile(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
+
+    for col_idx, col_name in enumerate(headers):
+        col_samples = [
+            row[col_idx].strip()
+            for row in rows[:50]
+            if col_idx < len(row) and row[col_idx] and row[col_idx].strip()
+        ]
+        if not col_samples:
+            continue
+
+        # 1. ตรวจสอบเลขประจำตัวประชาชน (13 หลัก)
+        if any(id_card_regex.match(s) for s in col_samples):
+            warnings.append({
+                "column": col_name,
+                "type": "citizen_id",
+                "message": f"คอลัมน์ '{col_name}' มีข้อมูลที่มีลักษณะคล้ายเลขบัตรประจำตัวประชาชน (13 หลัก)"
+            })
+            continue
+
+        # 2. ตรวจสอบเบอร์โทรศัพท์
+        if any(phone_regex.match(s) for s in col_samples):
+            warnings.append({
+                "column": col_name,
+                "type": "phone_number",
+                "message": f"คอลัมน์ '{col_name}' มีข้อมูลที่มีลักษณะคล้ายเบอร์โทรศัพท์"
+            })
+            continue
+
+        # 3. ตรวจสอบอีเมล
+        if any(email_regex.match(s) for s in col_samples):
+            warnings.append({
+                "column": col_name,
+                "type": "email",
+                "message": f"คอลัมน์ '{col_name}' มีข้อมูลที่อยู่อีเมล"
+            })
+            continue
+
+    return warnings
+
+
 def upload_csv_to_db(file_path: str, table_name: str) -> dict:
     """
     ระบบการนำเข้าข้อมูลและจัดการโครงสร้าง (Data Integration & Schema Mapping System)
@@ -267,6 +317,8 @@ def upload_csv_to_db(file_path: str, table_name: str) -> dict:
                 inserted_count = len(batch_rows)
             conn.commit()
 
+        pii_warnings = detect_pii(headers, rows)
+
         return {
             "status": "success",
             "table_name": table_clean,
@@ -274,6 +326,7 @@ def upload_csv_to_db(file_path: str, table_name: str) -> dict:
             "columns": headers,
             "detected_types": col_types,
             "encoding": used_encoding,
+            "pii_warnings": pii_warnings,
         }
     except Exception as e:
         return {

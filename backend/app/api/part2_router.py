@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 from typing import List, Optional, Any, Dict
 from fastapi import APIRouter, Query, HTTPException, Body
 from pydantic import BaseModel
@@ -19,6 +20,89 @@ from app.part3_analytics_insights.recommender.chart_formatter import format_visu
 
 logger = logging.getLogger("QueryPipeline")
 router = APIRouter(prefix="/query", tags=["Part 2 & Main Workflow: Query & SQL Execution"])
+
+# ==============================================================================
+# In-Memory Query Result Caching (ลดโหลด Groq API & ตอบกลับทันทีสำหรับคำถามซ้ำ)
+# ==============================================================================
+_QUERY_CACHE: Dict[str, Dict[str, Any]] = {}
+CACHE_TTL_SECONDS = 300  # 5 นาที
+MAX_CACHE_ENTRIES = 200
+
+
+def _get_cache_key(query: str, active_tables: list) -> str:
+    tbls_key = ",".join(sorted(active_tables))
+    return f"{query.strip().lower()}::{tbls_key}"
+
+
+def _get_cached_result(cache_key: str) -> Optional[dict]:
+    entry = _QUERY_CACHE.get(cache_key)
+    if not entry:
+        return None
+    if time.time() > entry["expires_at"]:
+        _QUERY_CACHE.pop(cache_key, None)
+        return None
+    return entry["result"]
+
+
+def _set_cached_result(cache_key: str, result: dict):
+    if len(_QUERY_CACHE) >= MAX_CACHE_ENTRIES:
+        now = time.time()
+        expired = [k for k, v in _QUERY_CACHE.items() if now > v["expires_at"]]
+        for k in expired:
+            _QUERY_CACHE.pop(k, None)
+        if len(_QUERY_CACHE) >= MAX_CACHE_ENTRIES:
+            for k in list(_QUERY_CACHE.keys())[:20]:
+                _QUERY_CACHE.pop(k, None)
+    _QUERY_CACHE[cache_key] = {
+        "result": result,
+        "expires_at": time.time() + CACHE_TTL_SECONDS,
+    }
+
+
+def clear_query_cache():
+    """ล้างแคชทั้งหมดเมื่อโครงสร้างฐานข้อมูลหรือไฟล์ตารางมีการเปลี่ยนแปลง"""
+    _QUERY_CACHE.clear()
+
+
+def _format_user_friendly_error(error_msg: str, user_query: str) -> str:
+    """
+    แปลงข้อความ Error ทางเทคนิคของ SQLite / LLM ให้เป็นภาษาไทยที่สุภาพ
+    และเข้าใจง่ายสำหรับผู้ใช้งานทั่วไป (Non-technical users)
+    """
+    err_str = str(error_msg).lower()
+
+    if "no such column" in err_str:
+        col_match = re.search(r'no such column:\s*([a-zA-Z0-9_\u0E00-\u0E7F.]+)', str(error_msg), re.IGNORECASE)
+        col_name = col_match.group(1) if col_match else "ที่ระบุ"
+        return (
+            f"ไม่พบคอลัมน์หรือข้อมูล `{col_name}` ในชุดข้อมูลปัจจุบันครับ\n\n"
+            "💡 **ข้อแนะนำ:** กรุณาตรวจสอบชื่อหัวตารางในแท็บ *'ตารางข้อมูล'* หรือลองระบุคำค้นหาใหม่ให้ตรงกับข้อมูลที่มีในตาราง"
+        )
+    elif "no such table" in err_str:
+        return (
+            "ไม่พบตารางข้อมูลที่ต้องการค้นหาในระบบครับ\n\n"
+            "💡 **ข้อแนะนำ:** กรุณาคลิกปุ่ม **`+`** ด้านล่างเพื่อนำเข้าไฟล์ CSV ก่อนเริ่มค้นหา"
+        )
+    elif "timeout" in err_str or "timed out" in err_str:
+        return (
+            "การประมวลผลคำสั่งใช้เวลานานเกินกำหนดครับ\n\n"
+            "💡 **ข้อแนะนำ:** กรุณาระบุเงื่อนไขการค้นหาให้เจาะจงยิ่งขึ้น หรือจำกัดช่วงเวลาของข้อมูล"
+        )
+    elif "rate limit" in err_str or "429" in err_str or "too many requests" in err_str:
+        return (
+            "ขณะนี้ระบบมีการเรียกใช้งานถี่เกินขีดจำกัดชั่วคราว (Rate Limit)\n\n"
+            "💡 **ข้อแนะนำ:** กรุณารอสักครู่ (ประมาณ 30 วินาที) แล้วลองกดส่งคำถามใหม่อีกครั้งครับ"
+        )
+    elif "syntax error" in err_str or "operationalerror" in err_str:
+        return (
+            "เกิดข้อผิดพลาดในการแปลความหมายคำถามเป็นคำสั่งค้นหา\n\n"
+            "💡 **ข้อแนะนำ:** ลองปรับรูปประโยคให้กระชับขึ้น เช่น *'แสดงข้อมูล 10 อันดับแรก'* หรือ *'สรุปผลรวมแบ่งตามหมวดหมู่'*"
+        )
+    else:
+        return (
+            f"เกิดข้อผิดพลาดในการประมวลผลข้อมูล: {error_msg}\n\n"
+            "💡 **ข้อแนะนำ:** กรุณาตรวจสอบคำถามหรือระบุชื่อข้อมูลที่ต้องการสืบค้นให้เจาะจงยิ่งขึ้น"
+        )
 
 
 class ChatMessageModel(BaseModel):
@@ -199,15 +283,23 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
                 ],
             }
 
+    # ตรวจสอบ In-Memory Query Cache ก่อนเรียก LLM
+    cache_key = _get_cache_key(user_query, uploaded_tables)
+    cached_payload = _get_cached_result(cache_key)
+    if cached_payload:
+        logger.info(f"Query Cache HIT for: '{user_query}'")
+        return cached_payload
+
     # 1. แปลงคำถามเป็น SQL (Part 2)
     try:
         sql_query = translate_nl_to_sql(user_query, history)
     except Exception as e:
         logger.error(f"Translation failed: {e}")
+        friendly_err = _format_user_friendly_error(str(e), user_query)
         return {
             "query": user_query,
             "sql": "",
-            "response": f"ขออภัยครับ ไม่สามารถเชื่อมต่อกับ AI เพื่อแปลคำถามเป็น SQL ได้ ({str(e)})",
+            "response": f"ขออภัยครับ เกิดข้อผิดพลาดในการเชื่อมต่อกับระบบ AI\n\n{friendly_err}",
             "visualization": None,
             "data": [],
             "follow_up_questions": [
@@ -270,10 +362,11 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
     ]
 
     if not sandbox_result or sandbox_result.get("status") != "success":
+        friendly_err = _format_user_friendly_error(last_error, user_query)
         return {
             "query": user_query,
             "sql": sql_query,
-            "response": f"ขออภัยครับ ไม่สามารถดึงข้อมูลได้: {last_error}",
+            "response": friendly_err,
             "visualization": None,
             "data": [],
             "follow_up_questions": default_fallbacks[:2],
@@ -281,7 +374,7 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
 
     raw_data = sandbox_result.get("data", [])
     if not raw_data:
-        return {
+        empty_res = {
             "query": user_query,
             "sql": sql_query,
             "response": "ประมวลผลคำสั่งสำเร็จ แต่ไม่พบข้อมูลที่ตรงกับเงื่อนไขในฐานข้อมูล",
@@ -289,6 +382,8 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
             "data": [],
             "follow_up_questions": default_fallbacks,
         }
+        _set_cached_result(cache_key, empty_res)
+        return empty_res
 
     # 5. สรุป Insight ภาษาไทยสำหรับผู้บริหาร (Part 3)
     try:
@@ -307,7 +402,7 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
     # 7. สร้างคำถามแนะนำต่อเนื่อง (Smart Follow-up Questions)
     follow_ups = _generate_follow_up_questions(user_query, sql_query, raw_data)
 
-    return {
+    result_payload = {
         "query": user_query,
         "sql": sql_query,
         "response": insight_text,
@@ -315,6 +410,11 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
         "data": raw_data,
         "follow_up_questions": follow_ups,
     }
+
+    # บันทึกลงใน In-Memory Cache เพื่อความรวดเร็วในการเรียกซ้ำ
+    _set_cached_result(cache_key, result_payload)
+
+    return result_payload
 
 
 @router.post("")
