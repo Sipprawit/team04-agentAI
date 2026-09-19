@@ -53,6 +53,23 @@ def is_metric_column(col_name: str, sample_values: list = None) -> bool:
     return True
 
 
+def _is_numeric_sample(val) -> bool:
+    """ตรวจสอบว่าค่าตัวอย่างเป็นตัวเลขหรือไม่ (รองรับทศนิยม, ค่าติดลบ, และคอมม่า)"""
+    if val is None:
+        return False
+    if isinstance(val, (int, float)):
+        return True
+    if isinstance(val, str):
+        clean = val.replace(",", "").strip()
+        if clean and clean.lower() not in {"-", "--", "—", "n/a", "na", "null", "none", "nil", "nan"}:
+            try:
+                float(clean)
+                return True
+            except ValueError:
+                pass
+    return False
+
+
 def _get_metric_columns(data: list) -> list:
     """ดึงรายชื่อคอลัมน์ที่เป็นตัวเลขเชิงปริมาณที่แท้จริงจากชุดข้อมูล"""
     if not data:
@@ -61,9 +78,9 @@ def _get_metric_columns(data: list) -> list:
     metric_cols = []
     for col_name in first_row.keys():
         sample_vals = [row.get(col_name) for row in data[:10]]
-        # เช็คว่ามีค่าตัวเลขหรือไม่
+        # เช็คว่ามีค่าตัวเลขหรือไม่ (รองรับทศนิยม, ค่าติดลบ, และคอมม่า)
         has_number = any(
-            isinstance(v, (int, float)) or (isinstance(v, str) and v.replace(",", "").strip().replace(".", "", 1).isdigit())
+            _is_numeric_sample(v)
             for v in sample_vals if v is not None and v != ""
         )
         if has_number and is_metric_column(col_name, sample_vals):
@@ -111,7 +128,7 @@ def recommend_chart_type(data: list) -> str:
         or 'ร้อยละ' in k or 'เปอร์เซ็นต์' in k or 'สัดส่วน' in k
         for k in metric_cols
     )
-    if has_percentage and 3 <= len(data) <= 8:
+    if has_percentage and 3 <= len(data) <= 15:
         return "pie"
 
     # เปรียบเทียบหมวดหมู่ 2-25 รายการที่มีตัวเลข -> Bar chart

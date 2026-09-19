@@ -75,6 +75,14 @@ class TestDetectColumnType:
     def test_all_empty_strings(self):
         assert _detect_column_type(["", "", ""]) == "TEXT"
 
+    def test_integer_with_dashes_and_na(self):
+        """ทดสอบคอลัมน์ตัวเลขที่มีค่าว่างขีด - หรือ N/A ปะปน ต้องยังคงระบุเป็น INTEGER ได้ถูกต้อง"""
+        assert _detect_column_type(["100", "-", "250", "N/A", "500", ""]) == "INTEGER"
+
+    def test_float_with_dashes_and_null(self):
+        """ทดสอบคอลัมน์ทศนิยมที่มีขีด - หรือ null ปะปน ต้องยังคงระบุเป็น REAL ได้ถูกต้อง"""
+        assert _detect_column_type(["10.5", "-", "25.0", "null", ""]) == "REAL"
+
 
 class TestNormalizeDate:
     """ทดสอบ Date normalization"""

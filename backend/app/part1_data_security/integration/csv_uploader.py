@@ -69,13 +69,22 @@ def _read_csv_with_fallback(file_path: str):
     raise ValueError(f"ไม่สามารถถอดรหัสตัวอักษรของไฟล์ CSV ได้ (สาเหตุ: {last_error}) กรุณาบันทึกเป็น UTF-8 หรือ Windows Thai (CP874)")
 
 
+# ชุดค่าว่างและ placeholder ที่พบบ่อยในไฟล์ CSV เช่น -, N/A, NA, null, nil
+NA_PLACEHOLDERS = {"", "-", "--", "—", "n/a", "na", "null", "none", "nil", "nan", "."}
+
+
 def _detect_column_type(values: list) -> str:
     """
     ตรวจจับชนิดข้อมูลอัตโนมัติจากค่าตัวอย่างในคอลัมน์
     ลำดับการตรวจ: INTEGER -> REAL -> DATE -> TEXT
+    - กรองค่าว่างและ NA Placeholders (เช่น "-", "N/A", "null") ออกก่อนตรวจจับ
+    - หากค่าตัวอย่างที่ถูกต้องทั้งหมดเป็นตัวเลข จะระบุเป็น INTEGER หรือ REAL ได้อย่างแม่นยำ
     """
-    # กรองค่าว่างออก
-    samples = [v.strip() for v in values if v and v.strip()]
+    # กรองค่าว่างและ NA placeholders ออก
+    samples = [
+        v.strip() for v in values 
+        if v and v.strip() and v.strip().lower() not in NA_PLACEHOLDERS
+    ]
     if not samples:
         return "TEXT"
 
@@ -101,7 +110,7 @@ def _detect_column_type(values: list) -> str:
     if is_float:
         return "REAL"
 
-    # ตรวจสอบ DATE (รูปแบบ YYYY-MM-DD หรือ DD/MM/YYYY)
+    # ตรวจสอบ DATE (รูปแบบ YYYY-MM-DD หรือ DD/MM/YYYY หรือ YYYY/MM/DD)
     date_pattern = re.compile(
         r"^\d{4}-\d{2}-\d{2}$|^\d{2}/\d{2}/\d{4}$|^\d{4}/\d{2}/\d{2}$"
     )
@@ -227,21 +236,29 @@ def upload_csv_to_db(file_path: str, table_name: str) -> dict:
                         val = row[i].strip() if row[i] else None
                         # แปลงค่าตามชนิดที่ตรวจจับได้
                         if val is not None and val != "":
-                            # ลบคอมม่าออกจากตัวเลข
-                            clean_num = val.replace(",", "")
-                            if col_types[col] == "INTEGER":
-                                try:
-                                    val = int(clean_num)
-                                except ValueError:
-                                    pass
-                            elif col_types[col] == "REAL":
-                                try:
-                                    val = float(clean_num)
-                                except ValueError:
-                                    pass
-                            elif col_types[col] == "DATE":
-                                # Normalize วันที่เป็น ISO format YYYY-MM-DD สำหรับ SQLite
-                                val = _normalize_date(val)
+                            clean_str = val.strip()
+                            if clean_str.lower() in NA_PLACEHOLDERS:
+                                val = None
+                            else:
+                                clean_num = clean_str.replace(",", "")
+                                if col_types[col] == "INTEGER":
+                                    try:
+                                        val = int(clean_num)
+                                    except ValueError:
+                                        try:
+                                            val = int(float(clean_num))
+                                        except ValueError:
+                                            pass
+                                elif col_types[col] == "REAL":
+                                    try:
+                                        val = float(clean_num)
+                                    except ValueError:
+                                        pass
+                                elif col_types[col] == "DATE":
+                                    # Normalize วันที่เป็น ISO format YYYY-MM-DD สำหรับ SQLite
+                                    val = _normalize_date(clean_str)
+                        else:
+                            val = None
                         row_dict[f"param_{i}"] = val
                     batch_rows.append(row_dict)
 

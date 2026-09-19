@@ -2,27 +2,36 @@ from app.part3_analytics_insights.recommender.eda_analyzer import recommend_char
 
 
 def _to_number(val):
-    """แปลงค่าเป็น int/float ถ้าทำได้"""
+    """แปลงค่าเป็น int/float ถ้าทำได้ ปลอดภัยจาก None และ NA placeholders"""
+    if val is None:
+        return 0
     if isinstance(val, (int, float)):
         return val
     if isinstance(val, str):
+        clean = val.replace(",", "").strip()
+        if not clean or clean.lower() in {"-", "--", "—", "n/a", "na", "null", "none", "nil", "nan"}:
+            return 0
         try:
-            clean = val.replace(",", "").strip()
             if "." in clean:
                 return float(clean)
             return int(clean)
         except ValueError:
-            return 0
+            try:
+                return float(clean)
+            except ValueError:
+                return 0
     return 0
 
 
 def _is_numeric(val) -> bool:
-    """ตรวจสอบว่าค่าเป็นตัวเลขหรือไม่"""
+    """ตรวจสอบว่าค่าเป็นตัวเลขหรือไม่ ปลอดภัยจาก None และ NA placeholders"""
+    if val is None:
+        return False
     if isinstance(val, (int, float)):
         return True
     if isinstance(val, str):
         clean = val.replace(",", "").strip()
-        if clean:
+        if clean and clean.lower() not in {"-", "--", "—", "n/a", "na", "null", "none", "nil", "nan"}:
             try:
                 float(clean)
                 return True
@@ -143,18 +152,51 @@ def format_visualization_payload(data: list) -> dict:
 
         chart_data.append(entry)
 
+    # บันทึกจำนวนรายการดั้งเดิมก่อนจัดทอน
+    total_count = len(chart_data)
+    is_truncated = False
+    truncation_label = None
+
     # กรณี Pie Chart: กรองข้อมูลที่มีค่า <= 0 ออก เพราะ Pie Chart ไม่ควรมีชิ้นที่ไม่มีค่า
     if chart_type == "pie":
         pie_data = [d for d in chart_data if d.get("value", 0) > 0]
-        pie_labels = [labels[i] for i, v in enumerate(values) if v > 0]
-        pie_values = [v for v in values if v > 0]
         # ถ้าหลังกรองเหลือน้อยกว่า 2 ชิ้น ไม่คุ้มแสดง Pie → ใช้ bar แทน
         if len(pie_data) < 2:
             chart_type = "bar"
         else:
-            chart_data = pie_data
-            labels = pie_labels
-            values = pie_values
+            # หากมีมากกว่า 8 ชิ้น จัดกลุ่มชิ้นเล็กเป็น 'อื่นๆ' (Others) เพื่อความชัดเจนของ Pie Chart
+            if len(pie_data) > 8:
+                sorted_pie = sorted(pie_data, key=lambda x: x.get("value", 0), reverse=True)
+                top_slices = sorted_pie[:7]
+                other_slices = sorted_pie[7:]
+                other_val = sum(s.get("value", 0) for s in other_slices)
+                if other_val > 0:
+                    other_entry = {
+                        "name": "อื่นๆ",
+                        x_axis_key: "อื่นๆ",
+                        primary_y_key: other_val,
+                        "value": other_val,
+                    }
+                    chart_data = top_slices + [other_entry]
+                else:
+                    chart_data = top_slices
+                labels = [d["name"] for d in chart_data]
+                values = [d["value"] for d in chart_data]
+                is_truncated = True
+                truncation_label = f"แสดง 7 หมวดหมู่อันดับแรก และรวม {len(other_slices)} รายการที่เหลือเป็น 'อื่นๆ'"
+            else:
+                chart_data = pie_data
+                labels = [d["name"] for d in chart_data]
+                values = [d["value"] for d in chart_data]
+
+    # กรณี Bar / Line / Area Chart: หากข้อมูลเกิน 20 รายการ ให้ตัดทอนเฉพาะ 20 รายการแรกเพื่อไม่ให้กราฟแออัด
+    MAX_CHART_ITEMS = 20
+    if chart_type != "pie" and len(chart_data) > MAX_CHART_ITEMS:
+        chart_data = chart_data[:MAX_CHART_ITEMS]
+        labels = labels[:MAX_CHART_ITEMS]
+        values = values[:MAX_CHART_ITEMS]
+        is_truncated = True
+        truncation_label = f"แสดง {MAX_CHART_ITEMS} รายการแรกจากทั้งหมด {total_count} รายการ (ดูข้อมูลครบถ้วนได้ในแท็บตารางข้อมูล)"
 
     result = {
         "recommended_chart": chart_type,
@@ -163,7 +205,13 @@ def format_visualization_payload(data: list) -> dict:
         "labels": labels,
         "values": values,
         "chart_data": chart_data,
+        "is_truncated": is_truncated,
+        "total_count": total_count,
+        "displayed_count": len(chart_data),
     }
+
+    if truncation_label:
+        result["truncation_label"] = truncation_label
 
     if len(metric_keys) > 1:
         result["series_keys"] = metric_keys

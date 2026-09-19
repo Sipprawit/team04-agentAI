@@ -1340,6 +1340,90 @@ body {
   margin-bottom: 14px;
 }
 
+/* Truncation Notice Banner */
+.chart-truncation-banner {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: #fffbeb;
+  border: 1px solid #fef3c7;
+  color: #92400e;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.77rem;
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.chart-truncation-banner .truncation-icon {
+  flex-shrink: 0;
+  color: #d97706;
+}
+
+.chart-truncation-banner .truncation-text {
+  font-weight: 500;
+}
+
+.chart-truncation-banner .truncation-hint {
+  color: #b45309;
+  font-weight: 400;
+  font-size: 0.73rem;
+}
+
+/* Empty Fallback for Charts (e.g. Pie chart with <2 slices) */
+.chart-empty-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 250px;
+  text-align: center;
+  background: var(--slate-50);
+  border: 1px dashed var(--slate-200);
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.empty-fallback-icon {
+  color: var(--slate-400);
+  margin-bottom: 8px;
+}
+
+.empty-fallback-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--slate-700);
+  margin-bottom: 4px;
+}
+
+.empty-fallback-desc {
+  font-size: 0.76rem;
+  color: var(--slate-500);
+  margin-bottom: 14px;
+  max-width: 280px;
+}
+
+.empty-fallback-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid var(--primary-300);
+  color: var(--primary-600);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.empty-fallback-btn:hover {
+  background: var(--primary-50);
+  border-color: var(--primary-500);
+}
+
 /* Custom Chart Hover Tooltip */
 .custom-chart-tooltip {
   background: #ffffff;

@@ -180,18 +180,31 @@ export default function ChartRenderer({ visualization }) {
         </div>
       </div>
 
+      {/* Truncation Notice Banner (กรณีข้อมูลเกิน 20 รายการ หรือจัดกลุ่ม Pie) */}
+      {visualization?.is_truncated && (
+        <div className="chart-truncation-banner">
+          <Info size={13} className="truncation-icon" />
+          <span className="truncation-text">
+            {visualization.truncation_label || `แสดง ${data.length} รายการแรกจากทั้งหมด ${visualization.total_count || data.length} รายการ`}
+            <span className="truncation-hint"> (ดูข้อมูลทั้งหมดได้ในแท็บตารางข้อมูล)</span>
+          </span>
+        </div>
+      )}
+
       {/* Render Selected Chart Type with Custom Hover Tooltip */}
       <div style={{ width: '100%', height: 290 }}>
         {selectedChartType === 'bar' && (
           <ResponsiveContainer>
-            <BarChart data={data} margin={{ top: 15, right: 20, left: 10, bottom: 35 }}>
+            <BarChart data={data} margin={{ top: 15, right: 20, left: 10, bottom: 45 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis
                 dataKey="name"
-                tick={{ fill: '#64748b', fontSize: 11 }}
+                tick={{ fill: '#64748b', fontSize: 10 }}
                 interval={0}
-                angle={-20}
+                angle={-25}
                 textAnchor="end"
+                height={45}
+                tickFormatter={(val) => (val && val.length > 15 ? val.slice(0, 15) + '...' : val)}
               />
               <YAxis tick={{ fill: '#64748b', fontSize: 11 }} />
               <Tooltip content={<CustomChartTooltip />} />
@@ -206,14 +219,16 @@ export default function ChartRenderer({ visualization }) {
 
         {selectedChartType === 'line' && (
           <ResponsiveContainer>
-            <LineChart data={data} margin={{ top: 15, right: 20, left: 10, bottom: 35 }}>
+            <LineChart data={data} margin={{ top: 15, right: 20, left: 10, bottom: 45 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis
                 dataKey="name"
-                tick={{ fill: '#64748b', fontSize: 11 }}
+                tick={{ fill: '#64748b', fontSize: 10 }}
                 interval={0}
-                angle={-20}
+                angle={-25}
                 textAnchor="end"
+                height={45}
+                tickFormatter={(val) => (val && val.length > 15 ? val.slice(0, 15) + '...' : val)}
               />
               <YAxis tick={{ fill: '#64748b', fontSize: 11 }} />
               <Tooltip content={<CustomChartTooltip />} />
@@ -231,8 +246,33 @@ export default function ChartRenderer({ visualization }) {
 
         {selectedChartType === 'pie' && (() => {
           // กรองข้อมูลที่มีค่า <= 0 ออก เพราะ Pie Chart ไม่ควรมีชิ้นที่ไม่มีค่า
-          const pieData = data.filter(d => (d.value || 0) > 0);
-          if (pieData.length < 2) return null;
+          let pieData = data.filter(d => (d.value || 0) > 0);
+          if (pieData.length < 2) {
+            return (
+              <div className="chart-empty-fallback">
+                <PieIcon size={32} className="empty-fallback-icon" />
+                <p className="empty-fallback-title">ข้อมูลไม่เพียงพอสำหรับแผนภูมิวงกลม</p>
+                <p className="empty-fallback-desc">แผนภูมิวงกลมจำเป็นต้องมีข้อมูลอย่างน้อย 2 รายการที่มีค่ามากกว่า 0</p>
+                <button
+                  type="button"
+                  className="empty-fallback-btn"
+                  onClick={() => setSelectedChartType('bar')}
+                >
+                  <BarChart3 size={13} />
+                  <span>สลับดูกราฟแท่ง (Bar Chart)</span>
+                </button>
+              </div>
+            );
+          }
+          // หากชิ้นข้อมูลมีมากกว่า 8 ชิ้น และยังไม่ได้รวม 'อื่นๆ' ให้รวมชิ้นเล็กเข้าด้วยกัน
+          if (pieData.length > 8 && !pieData.some(d => d.name === 'อื่นๆ')) {
+            const sorted = [...pieData].sort((a, b) => (b.value || 0) - (a.value || 0));
+            const top7 = sorted.slice(0, 7);
+            const othersVal = sorted.slice(7).reduce((acc, curr) => acc + (curr.value || 0), 0);
+            if (othersVal > 0) {
+              pieData = [...top7, { name: 'อื่นๆ', value: othersVal }];
+            }
+          }
           return (
           <ResponsiveContainer>
             <PieChart>
@@ -244,7 +284,7 @@ export default function ChartRenderer({ visualization }) {
                 cy="48%"
                 outerRadius={85}
                 label={({ name, value, percent }) => {
-                  const shortName = name.length > 15 ? name.slice(0, 15) + '...' : name;
+                  const shortName = name.length > 14 ? name.slice(0, 14) + '...' : name;
                   const fmtVal = typeof value === 'number' ? value.toLocaleString() : value;
                   return `${shortName} (${(percent * 100).toFixed(1)}%, ${fmtVal})`;
                 }}

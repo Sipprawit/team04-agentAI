@@ -122,3 +122,25 @@ class TestChartFormatter:
         data = [{"total_sales": 1500000}]
         result = format_visualization_payload(data)
         assert result["recommended_chart"] == "summary_card"
+
+    def test_pie_chart_groups_small_slices_into_others(self):
+        """ทดสอบ Pie chart ที่มีชิ้นข้อมูล > 8 ชิ้น ต้องรวมกลุ่มชิ้นเล็กเป็น 'อื่นๆ'"""
+        # สร้างข้อมูลสัดส่วน 12 รายการ
+        data = [{"category": f"cat_{i}", "percent_share": (12 - i) * 5} for i in range(12)]
+        result = format_visualization_payload(data)
+        assert result["recommended_chart"] == "pie"
+        assert len(result["chart_data"]) == 8  # 7 ชิ้นแรก + 1 ชิ้น 'อื่นๆ'
+        assert result["chart_data"][-1]["name"] == "อื่นๆ"
+        assert result["is_truncated"] is True
+        assert "อื่นๆ" in result["truncation_label"]
+
+    def test_chart_truncation_over_20_items(self):
+        """ทดสอบกราฟที่มีข้อมูลเกิน 20 รายการ (เช่น กราฟเส้นช่วงเวลา 30 วัน) ต้องตัดทอนเหลือ 20 รายการแรก"""
+        data = [{"date": f"2024-01-{i+1:02d}", "value": (i + 1) * 10} for i in range(30)]
+        result = format_visualization_payload(data)
+        assert result["recommended_chart"] == "line"
+        assert len(result["chart_data"]) == 20
+        assert result["is_truncated"] is True
+        assert result["total_count"] == 30
+        assert result["displayed_count"] == 20
+        assert "20 รายการแรกจากทั้งหมด 30 รายการ" in result["truncation_label"]
