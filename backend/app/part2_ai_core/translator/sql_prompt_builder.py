@@ -6,7 +6,7 @@ def build_sql_prompt(user_query: str, chat_history: list = None) -> str:
     สร้าง Prompt สำหรับแปลงภาษาธรรมชาติเป็น SQL
     รวมทั้งคำถาม, โครงสร้างตาราง (Schema) และประวัติการสนทนา
     """
-    schema = get_database_schema_info()
+    schema = get_database_schema_info(relevant_query=user_query)
 
     history_lines = []
     if chat_history:

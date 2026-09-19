@@ -106,6 +106,49 @@ async def delete_dataset_table(table_name: str):
         raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาดในการลบชุดข้อมูล: {str(e)}")
 
 
+@router.get("/datasets")
+async def list_datasets():
+    """
+    ดึงรายการชุดข้อมูลทั้งหมดในระบบ พร้อมจำนวนแถว รายชื่อคอลัมน์ และสถานะการลบได้
+    """
+    from sqlalchemy import inspect
+    from app.part1_data_security.integration.schema_inspector import _is_test_or_system_table, MOCK_TABLES
+
+    try:
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        datasets = []
+
+        with engine.connect() as conn:
+            for tbl in tables:
+                if _is_test_or_system_table(tbl):
+                    continue
+                is_mock = tbl in MOCK_TABLES
+                try:
+                    row_count = conn.execute(text(f'SELECT COUNT(*) FROM "{tbl}";')).scalar() or 0
+                except Exception:
+                    row_count = 0
+
+                columns = [col["name"] for col in inspector.get_columns(tbl)]
+
+                datasets.append({
+                    "table_name": tbl,
+                    "row_count": row_count,
+                    "columns": columns,
+                    "is_uploaded": not is_mock,
+                    "is_deletable": not is_mock
+                })
+
+        datasets.sort(key=lambda d: (not d["is_uploaded"], d["table_name"]))
+        return {
+            "status": "success",
+            "count": len(datasets),
+            "datasets": datasets
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ไม่สามารถดึงรายการชุดข้อมูลได้: {str(e)}")
+
+
 @router.get("/tables/{table_name}/preview")
 async def preview_table(table_name: str, limit: int = Query(default=10, ge=1, le=100)):
     """ดึงตัวอย่างข้อมูล N แถวแรกของตาราง"""

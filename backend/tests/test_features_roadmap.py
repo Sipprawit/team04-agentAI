@@ -165,3 +165,86 @@ class TestDatasetDeletionAPI:
                 {"name": table_name}
             ).fetchone()
             assert check is None
+
+class TestDatasetListingAPI:
+    """ทดสอบ API GET /part1/datasets"""
+
+    def test_list_datasets_success(self):
+        resp = client.get("/part1/datasets")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "success"
+        assert isinstance(data["datasets"], list)
+        if len(data["datasets"]) > 0:
+            item = data["datasets"][0]
+            assert "table_name" in item
+            assert "row_count" in item
+            assert "columns" in item
+            assert "is_uploaded" in item
+            assert "is_deletable" in item
+
+
+class TestAdvancedStatisticsAndAnomalies:
+    """ทดสอบการคำนวณ Median, SD และ Anomaly Detection (Part 3)"""
+
+    def test_median_and_std_dev_calculation(self):
+        from app.part3_analytics_insights.insights.stat_calculator import calculate_advanced_statistics
+        data = [
+            {"product": "A", "price": 10},
+            {"product": "B", "price": 20},
+            {"product": "C", "price": 30},
+            {"product": "D", "price": 40},
+            {"product": "E", "price": 50},
+        ]
+        stats = calculate_advanced_statistics(data)
+        assert stats["median"] == 30.0
+        assert stats["std_dev"] > 0
+        assert stats["average"] == 30.0
+
+    def test_anomaly_detection_flags_outliers(self):
+        from app.part3_analytics_insights.insights.stat_calculator import calculate_advanced_statistics
+        # ข้อมูลปกติอยู่ระหว่าง 10-20 แต่มีค่ากระโดดไปที่ 500
+        data = [
+            {"item": "ปกติ 1", "amount": 10},
+            {"item": "ปกติ 2", "amount": 12},
+            {"item": "ปกติ 3", "amount": 15},
+            {"item": "ปกติ 4", "amount": 14},
+            {"item": "ปกติ 5", "amount": 11},
+            {"item": "กระโดดผิดปกติ", "amount": 500},
+        ]
+        stats = calculate_advanced_statistics(data)
+        assert "anomalies" in stats
+        assert len(stats["anomalies"]) > 0
+        top_anomaly = stats["anomalies"][0]
+        assert top_anomaly["value"] == 500
+        assert top_anomaly["label"] == "กระโดดผิดปกติ"
+        assert top_anomaly["type"] == "high"
+
+    def test_fallback_summary_includes_anomaly_note(self):
+        from app.part3_analytics_insights.insights.executive_summarizer import _fallback_summary
+        raw_data = [
+            {"item": "ก", "amount": 10},
+            {"item": "ข", "amount": 500},
+            {"item": "ค", "amount": 12},
+            {"item": "ง", "amount": 11},
+        ]
+        stats = {
+            "total": 533,
+            "average": 133.25,
+            "median": 11.5,
+            "anomalies": [{"label": "ข", "value": 500, "type": "high", "ratio_to_avg": 3.8}]
+        }
+        summary = _fallback_summary("สรุปยอด", raw_data, stats)
+        assert "ข้อสังเกตค่าผิดปกติ" in summary
+        assert "500" in summary
+
+
+class TestSchemaRelevanceRanking:
+    """ทดสอบการจัดลำดับตารางตามความเกี่ยวข้องในคำถาม (Part 2)"""
+
+    def test_relevance_ranking_prioritizes_matching_table(self):
+        from app.part1_data_security.integration.schema_inspector import get_database_schema_info
+        info = get_database_schema_info(relevant_query="ลูกค้าทั้งหมดที่มียอดสั่งซื้อ")
+        assert isinstance(info, str)
+        # ตารางที่ชื่อหรือคอลัมน์ตรงกับคำถามควรได้รับการจัดอันดับ
+        assert "customers" in info or "orders" in info

@@ -29,18 +29,40 @@ def get_uploaded_tables() -> list:
         return []
 
 
-def get_database_schema_info(exclude_system_tables: bool = True) -> str:
+def _score_table_relevance(table_name: str, col_names: list, query: str) -> int:
+    """คำนวณคะแนนความเกี่ยวข้องของตารางและคอลัมน์กับคำถามของผู้ใช้"""
+    if not query:
+        return 0
+    q = query.lower()
+    score = 0
+    tbl_lower = table_name.lower()
+    if tbl_lower in q:
+        score += 15
+    for part in tbl_lower.split("_"):
+        if len(part) > 2 and part in q:
+            score += 5
+    for col in col_names:
+        cl = col.lower()
+        if cl in q:
+            score += 8
+        for part in cl.split("_"):
+            if len(part) > 2 and part in q:
+                score += 3
+    return score
+
+
+def get_database_schema_info(exclude_system_tables: bool = True, relevant_query: str = None) -> str:
     """
     อ่านและบันทึกโครงสร้างข้อมูล (Schema Mapping System)
     จัดลำดับตารางที่ผู้ใช้อัปโหลดเข้ามา (Uploaded Tables) ขึ้นก่อนตารางจำลอง (Mock Tables)
-    เพื่อให้ AI ทราบว่าควรดึงข้อมูลจากตารางที่ผู้ใช้อัปโหลดเป็นลำดับแรก
+    และจัดลำดับตารางที่เกี่ยวข้องกับคำถามมากที่สุด (Schema-aware Relevance Ranking) ไว้บนสุด
     """
     try:
         inspector = inspect(engine)
         tables = inspector.get_table_names()
 
-        uploaded_text = []
-        mock_text = []
+        uploaded_items = []
+        mock_items = []
 
         with engine.connect() as conn:
             for table_name in tables:
@@ -49,6 +71,7 @@ def get_database_schema_info(exclude_system_tables: bool = True) -> str:
 
                 # 1. คอลัมน์และชนิดข้อมูล
                 columns = inspector.get_columns(table_name)
+                col_names = [col['name'] for col in columns]
                 col_info = [f"{col['name']} ({col['type']})" for col in columns]
 
                 # 2. Foreign Keys (ความสัมพันธ์ระหว่างตาราง)
@@ -67,14 +90,24 @@ def get_database_schema_info(exclude_system_tables: bool = True) -> str:
                 except Exception:
                     row_count = "N/A"
 
-                table_str = f'Table: "{table_name}" (Rows: {row_count})\nColumns: {", ".join(col_info)}'
+                score = _score_table_relevance(table_name, col_names, relevant_query) if relevant_query else 0
+                relevance_tag = " [ตารางที่ตรงกับคำถามมากที่สุด]" if score > 0 else ""
+
+                table_str = f'Table: "{table_name}" (Rows: {row_count}){relevance_tag}\nColumns: {", ".join(col_info)}'
                 if fk_info:
                     table_str += f"\nForeign Keys: {'; '.join(fk_info)}"
 
                 if table_name not in MOCK_TABLES:
-                    uploaded_text.append(table_str)
+                    uploaded_items.append((score, table_str))
                 else:
-                    mock_text.append(table_str)
+                    mock_items.append((score, table_str))
+
+        # เรียงลำดับตารางตามคะแนนความเกี่ยวข้อง
+        uploaded_items.sort(key=lambda x: x[0], reverse=True)
+        mock_items.sort(key=lambda x: x[0], reverse=True)
+
+        uploaded_text = [item[1] for item in uploaded_items]
+        mock_text = [item[1] for item in mock_items]
 
         output_sections = []
         if uploaded_text:

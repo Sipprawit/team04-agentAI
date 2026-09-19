@@ -621,13 +621,20 @@ export default function App() {
 
   // CSV Upload Success
   const handleUploadSuccess = (res) => {
+    let messageText = `**นำเข้าชุดข้อมูลเข้าสู่ตาราง \`${res.table_name}\` สำเร็จ** (${res.row_count ? res.row_count.toLocaleString() : 0} รายการ)`;
+    if (res.pii_warnings && res.pii_warnings.length > 0) {
+      messageText += `\n\n⚠️ **แจ้งเตือนข้อมูลส่วนบุคคล (PII Warning):** ตรวจพบคอลัมน์ที่อาจมีข้อมูลระบุตัวตน:\n` +
+        res.pii_warnings.map(w => `- คอลัมน์ **\`${w.column}\`**: ${w.message}`).join('\n') +
+        `\n\n*โปรดใช้ความระมัดระวังในการเผยแพร่หรือส่งออกข้อมูลตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล (PDPA)*`;
+    }
+
     const uploadAiMsg = {
       id: `up_${Date.now()}`,
       role: 'ai',
       isUploadNotice: true,
       uploadData: res,
       userQuery: `นำเข้าไฟล์ชุดข้อมูล: ${res.table_name}`,
-      text: `**นำเข้าชุดข้อมูลเข้าสู่ตาราง \`${res.table_name}\` สำเร็จ**`,
+      text: messageText,
       sql: `SELECT * FROM "${res.table_name}" LIMIT 10;`,
       visualization: null,
       rawData: res.preview_data || [],
@@ -683,6 +690,23 @@ export default function App() {
       title: 'นำเข้าข้อมูลเรียบร้อย',
       message: `สร้างตาราง "${res.table_name}" จำนวน ${res.row_count.toLocaleString()} แถว พร้อมใช้งาน`
     });
+  };
+
+  // Handle dataset table deleted from modal
+  const handleDatasetDeleted = (deletedTableName) => {
+    setToast({
+      type: 'info',
+      title: 'ลบชุดข้อมูลสำเร็จ',
+      message: `ลบตาราง "${deletedTableName}" ออกจากระบบเรียบร้อยแล้ว`
+    });
+
+    if (activeMessage?.uploadData?.table_name === deletedTableName) {
+      setActiveMessage(null);
+    }
+
+    fetchSchemaDict().then(data => {
+      setSchemaDict(data || {});
+    }).catch(() => {});
   };
 
   // Helper for Column Type Badge colors
@@ -1014,11 +1038,12 @@ export default function App() {
         </div>
       </div>
 
-      {/* CSV File Upload Modal (Opened via '+' button) */}
+      {/* CSV File Upload & Dataset Management Modal (Opened via '+' button) */}
       <FileUploadModal
         isOpen={isUploadOpen}
         onClose={() => setIsUploadOpen(false)}
         onUploadSuccess={handleUploadSuccess}
+        onDatasetDeleted={handleDatasetDeleted}
       />
     </div>
   );
