@@ -167,7 +167,7 @@ class TestDatasetDeletionAPI:
             assert check is None
 
 class TestDatasetListingAPI:
-    """ทดสอบ API GET /part1/datasets"""
+    """ทดสอบ API GET /part1/datasets และ GET /part1/tables/{table}/preview"""
 
     def test_list_datasets_success(self):
         resp = client.get("/part1/datasets")
@@ -182,6 +182,25 @@ class TestDatasetListingAPI:
             assert "columns" in item
             assert "is_uploaded" in item
             assert "is_deletable" in item
+
+    def test_list_datasets_uploaded_only(self):
+        resp = client.get("/part1/datasets?uploaded_only=true")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "success"
+        for ds in data["datasets"]:
+            assert ds["is_uploaded"] is True
+            assert ds["table_name"] not in ("customers", "products", "orders")
+
+    def test_preview_table_success(self):
+        resp = client.get("/part1/tables/customers/preview?limit=5")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["table_name"] == "customers"
+        assert "data" in data
+        assert "total_rows" in data
+        assert isinstance(data["data"], list)
+
 
 
 class TestAdvancedStatisticsAndAnomalies:

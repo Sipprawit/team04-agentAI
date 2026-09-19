@@ -107,9 +107,10 @@ async def delete_dataset_table(table_name: str):
 
 
 @router.get("/datasets")
-async def list_datasets():
+async def list_datasets(uploaded_only: bool = Query(default=False)):
     """
-    ดึงรายการชุดข้อมูลทั้งหมดในระบบ พร้อมจำนวนแถว รายชื่อคอลัมน์ และสถานะการลบได้
+    ดึงรายการชุดข้อมูลในระบบ พร้อมจำนวนแถว รายชื่อคอลัมน์ และสถานะการลบได้
+    หาก uploaded_only=True จะแสดงเฉพาะตารางที่ผู้ใช้อัปโหลดเข้ามา (ไม่รวม Mock Tables)
     """
     from sqlalchemy import inspect
     from app.part1_data_security.integration.schema_inspector import _is_test_or_system_table, MOCK_TABLES
@@ -124,6 +125,8 @@ async def list_datasets():
                 if _is_test_or_system_table(tbl):
                     continue
                 is_mock = tbl in MOCK_TABLES
+                if uploaded_only and is_mock:
+                    continue
                 try:
                     row_count = conn.execute(text(f'SELECT COUNT(*) FROM "{tbl}";')).scalar() or 0
                 except Exception:

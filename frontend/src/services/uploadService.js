@@ -32,3 +32,8 @@ export const deleteDatasetTable = async (tableName) => {
   const response = await api.delete(`/part1/tables/${encodeURIComponent(tableName)}`);
   return response.data;
 };
+
+export const fetchTablePreview = async (tableName, limit = 10) => {
+  const response = await api.get(`/part1/tables/${encodeURIComponent(tableName)}/preview?limit=${limit}`);
+  return response.data;
+};

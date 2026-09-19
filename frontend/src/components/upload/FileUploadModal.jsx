@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   UploadCloud,
   FileSpreadsheet,
@@ -10,9 +10,17 @@ import {
   Database,
   Trash2,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  Table as TableIcon,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
-import { uploadCsvFile, fetchDatasets, deleteDatasetTable } from '../../services/uploadService';
+import {
+  uploadCsvFile,
+  fetchDatasets,
+  deleteDatasetTable,
+  fetchTablePreview
+} from '../../services/uploadService';
 
 export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDatasetDeleted }) {
   const [activeTab, setActiveTab] = useState('upload'); // 'upload' | 'manage'
@@ -29,6 +37,11 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
   const [isLoadingDatasets, setIsLoadingDatasets] = useState(false);
   const [deletingTable, setDeletingTable] = useState(null);
   const [confirmDeleteTable, setConfirmDeleteTable] = useState(null);
+
+  // Table Preview states
+  const [expandedTable, setExpandedTable] = useState(null);
+  const [previewCache, setPreviewCache] = useState({});
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
   const loadDatasets = useCallback(async () => {
     setIsLoadingDatasets(true);
@@ -136,6 +149,11 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
           onClose();
         }, 1200);
       }
+      setPreviewCache((prev) => {
+        const next = { ...prev };
+        delete next[result.table_name];
+        return next;
+      });
       loadDatasets();
     } catch (err) {
       const errorDetail = err.response?.data?.detail || err.message || 'เกิดข้อผิดพลาดในการประมวลผลไฟล์';
@@ -157,6 +175,14 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
     try {
       await deleteDatasetTable(targetTableName);
       setConfirmDeleteTable(null);
+      setPreviewCache((prev) => {
+        const next = { ...prev };
+        delete next[targetTableName];
+        return next;
+      });
+      if (expandedTable === targetTableName) {
+        setExpandedTable(null);
+      }
       await loadDatasets();
       if (onDatasetDeleted) {
         onDatasetDeleted(targetTableName);
@@ -167,6 +193,45 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
     } finally {
       setDeletingTable(null);
     }
+  };
+
+  // กรองเฉพาะตารางที่ผู้ใช้อัปโหลดเข้ามาจริง (ไม่แสดง mock tables/ตารางตัวอย่างระบบ)
+  const uploadedDatasets = datasets.filter((ds) => ds.is_uploaded);
+
+  // ตรวจสอบว่าชื่อตารางที่กำลังกรอก ซ้ำกับตารางเดิมที่มีอยู่หรือไม่
+  const isExistingTable = uploadedDatasets.some(
+    (ds) => ds.table_name.toLowerCase() === tableName.trim().toLowerCase()
+  );
+
+  // สลับเปิด/ปิดตารางตัวอย่างข้อมูล (Data Preview)
+  const handleTogglePreview = async (targetTableName) => {
+    if (expandedTable === targetTableName) {
+      setExpandedTable(null);
+      return;
+    }
+    setExpandedTable(targetTableName);
+    if (!previewCache[targetTableName]) {
+      setIsLoadingPreview(true);
+      try {
+        const res = await fetchTablePreview(targetTableName, 10);
+        setPreviewCache((prev) => ({ ...prev, [targetTableName]: res }));
+      } catch (err) {
+        console.error('Failed to load table preview', err);
+      } finally {
+        setIsLoadingPreview(false);
+      }
+    }
+  };
+
+  // เตรียมอัปโหลดไฟล์เดิมหรือไฟล์ใหม่เพื่อเขียนทับตารางเดิม
+  const handleStartReupload = (targetTableName) => {
+    setTableName(targetTableName);
+    setFile(null);
+    setMessage({
+      type: 'info',
+      text: `คุณกำลังจะอัปโหลดไฟล์ใหม่เพื่อเขียนทับตาราง "${targetTableName}" กรุณาเลือกไฟล์ CSV ที่ต้องการเขียนทับข้อมูลเดิม`,
+    });
+    setActiveTab('upload');
   };
 
   return (
@@ -204,8 +269,8 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
             onClick={() => setActiveTab('manage')}
           >
             <Database size={14} />
-            <span>ชุดข้อมูลในระบบ</span>
-            <span className="modal-tab-badge">{datasets.length}</span>
+            <span>ชุดข้อมูลที่พร้อมใช้งาน</span>
+            <span className="modal-tab-badge">{uploadedDatasets.length}</span>
           </button>
         </div>
 
@@ -258,6 +323,12 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
                 disabled={isUploading}
                 className="form-text-input"
               />
+              {isExistingTable && (
+                <div className="table-overwrite-notice">
+                  <AlertCircle size={13} className="text-amber-600 flex-shrink-0" />
+                  <span>ตารางชื่อ <strong>"{tableName.trim()}"</strong> มีอยู่ในระบบแล้ว การอัปโหลดครั้งนี้จะ<strong>เขียนทับ (Overwrite)</strong> ข้อมูลเดิม</span>
+                </div>
+              )}
             </div>
 
             {/* Standard Upload Messages */}
@@ -334,7 +405,7 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
           <div className="datasets-manage-panel">
             <div className="datasets-panel-header">
               <span className="datasets-count-label">
-                ชุดข้อมูลที่พร้อมใช้งาน ({datasets.length} ตาราง)
+                ชุดข้อมูลที่พร้อมใช้งาน ({uploadedDatasets.length} ตาราง)
               </span>
               <button
                 type="button"
@@ -353,81 +424,160 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
                 <Loader2 size={24} className="animate-spin text-blue-500" />
                 <span>กำลังโหลดรายการชุดข้อมูล...</span>
               </div>
-            ) : datasets.length === 0 ? (
+            ) : uploadedDatasets.length === 0 ? (
               <div className="datasets-empty-state">
-                <Database size={32} className="text-slate-300" />
-                <p>ยังไม่มีชุดข้อมูลในระบบ</p>
+                <Database size={36} className="text-slate-300" />
+                <p className="empty-title">ยังไม่มีชุดข้อมูลที่คุณอัปโหลดเข้ามา</p>
+                <p className="empty-subtitle">นำเข้าไฟล์ CSV ของคุณเพื่อเริ่มวิเคราะห์ข้อมูลและสร้างแผนภูมิรายงานอัตโนมัติ</p>
                 <button
                   type="button"
-                  className="btn-secondary btn-sm"
+                  className="btn-primary btn-sm"
                   onClick={() => setActiveTab('upload')}
                 >
-                  <UploadCloud size={13} />
+                  <UploadCloud size={14} />
                   <span>นำเข้าไฟล์ CSV ตอนนี้</span>
                 </button>
               </div>
             ) : (
               <div className="datasets-list-container">
-                {datasets.map((ds) => (
-                  <div key={ds.table_name} className="dataset-item-row">
-                    <div className="dataset-item-info">
-                      <div className="dataset-item-header">
-                        <span className="dataset-table-name">{ds.table_name}</span>
-                        {ds.is_uploaded ? (
-                          <span className="dataset-badge badge-uploaded">ตารางนำเข้า</span>
-                        ) : (
-                          <span className="dataset-badge badge-mock">ตารางตัวอย่าง</span>
-                        )}
-                      </div>
-                      <div className="dataset-item-meta">
-                        <span>{ds.row_count.toLocaleString()} แถว</span>
-                        <span>•</span>
-                        <span>{ds.columns.length} คอลัมน์ ({ds.columns.slice(0, 4).join(', ')}{ds.columns.length > 4 ? '...' : ''})</span>
-                      </div>
-                    </div>
+                {uploadedDatasets.map((ds) => {
+                  const isExpanded = expandedTable === ds.table_name;
+                  const currentPreview = previewCache[ds.table_name];
 
-                    <div className="dataset-item-actions">
-                      {ds.is_deletable ? (
-                        confirmDeleteTable === ds.table_name ? (
-                          <div className="dataset-delete-confirm-group">
-                            <span className="confirm-delete-text">ลบตาราง?</span>
-                            <button
-                              type="button"
-                              className="btn-danger-confirm btn-sm"
-                              onClick={() => handleDeleteTable(ds.table_name)}
-                              disabled={deletingTable === ds.table_name}
-                            >
-                              {deletingTable === ds.table_name ? (
-                                <Loader2 size={12} className="animate-spin" />
-                              ) : (
-                                'ยืนยัน'
-                              )}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-cancel-confirm btn-sm"
-                              onClick={() => setConfirmDeleteTable(null)}
-                            >
-                              ยกเลิก
-                            </button>
+                  return (
+                    <div
+                      key={ds.table_name}
+                      className={`dataset-item-card ${isExpanded ? 'is-expanded' : ''}`}
+                    >
+                      <div
+                        className="dataset-item-row"
+                        onClick={() => handleTogglePreview(ds.table_name)}
+                        title="คลิกเพื่อดูตัวอย่างข้อมูลในตารางนี้"
+                      >
+                        <div className="dataset-item-info">
+                          <div className="dataset-item-header">
+                            <span className="dataset-table-name">{ds.table_name}</span>
+                            <span className="dataset-badge badge-uploaded">ตารางนำเข้า</span>
+                            <span className="dataset-click-hint">
+                              {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                              <span>{isExpanded ? 'ซ่อนตัวอย่าง' : 'ดูตัวอย่างข้อมูล'}</span>
+                            </span>
                           </div>
-                        ) : (
+                          <div className="dataset-item-meta">
+                            <span>{ds.row_count.toLocaleString()} แถว</span>
+                            <span>•</span>
+                            <span>{ds.columns.length} คอลัมน์ ({ds.columns.slice(0, 4).join(', ')}{ds.columns.length > 4 ? '...' : ''})</span>
+                          </div>
+                        </div>
+
+                        <div className="dataset-item-actions" onClick={(e) => e.stopPropagation()}>
+                          {/* Re-upload / Overwrite button */}
                           <button
                             type="button"
-                            className="dataset-delete-btn"
-                            onClick={() => setConfirmDeleteTable(ds.table_name)}
-                            title={`ลบตาราง ${ds.table_name}`}
+                            className="dataset-reupload-btn"
+                            onClick={() => handleStartReupload(ds.table_name)}
+                            title={`อัปโหลดไฟล์ CSV ใหม่เพื่อแทนที่/อัปเดตข้อมูลในตาราง ${ds.table_name}`}
                           >
-                            <Trash2 size={14} />
-                            <span>ลบ</span>
+                            <RefreshCw size={12} />
+                            <span>อัปโหลดใหม่ (แทนที่)</span>
                           </button>
-                        )
-                      ) : (
-                        <span className="dataset-protected-label" title="ตารางระบบไม่สามารถลบได้">ตารางระบบ</span>
+
+                          {/* Delete Table */}
+                          {confirmDeleteTable === ds.table_name ? (
+                            <div className="dataset-delete-confirm-group">
+                              <span className="confirm-delete-text">ลบตาราง?</span>
+                              <button
+                                type="button"
+                                className="btn-danger-confirm btn-sm"
+                                onClick={() => handleDeleteTable(ds.table_name)}
+                                disabled={deletingTable === ds.table_name}
+                              >
+                                {deletingTable === ds.table_name ? (
+                                  <Loader2 size={12} className="animate-spin" />
+                                ) : (
+                                  'ยืนยัน'
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-cancel-confirm btn-sm"
+                                onClick={() => setConfirmDeleteTable(null)}
+                              >
+                                ยกเลิก
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="dataset-delete-btn"
+                              onClick={() => setConfirmDeleteTable(ds.table_name)}
+                              title={`ลบตาราง ${ds.table_name}`}
+                            >
+                              <Trash2 size={14} />
+                              <span>ลบ</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Expandable Table Preview */}
+                      {isExpanded && (
+                        <div className="dataset-preview-drawer">
+                          <div className="dataset-preview-header">
+                            <div className="preview-header-title">
+                              <TableIcon size={14} className="text-blue-600" />
+                              <span>ตารางตัวอย่างข้อมูล (10 แถวแรก)</span>
+                            </div>
+                            <span className="preview-header-meta">
+                              แสดง {currentPreview?.preview_count || 0} จากทั้งหมด {ds.row_count.toLocaleString()} แถว
+                            </span>
+                          </div>
+
+                          {isLoadingPreview && !currentPreview ? (
+                            <div className="dataset-preview-loading">
+                              <Loader2 size={16} className="animate-spin text-blue-500" />
+                              <span>กำลังโหลดตัวอย่างข้อมูล...</span>
+                            </div>
+                          ) : currentPreview?.data && currentPreview.data.length > 0 ? (
+                            <div className="dataset-preview-table-wrapper">
+                              <table className="dataset-preview-table">
+                                <thead>
+                                  <tr>
+                                    <th className="preview-th-idx">#</th>
+                                    {ds.columns.map((col) => (
+                                      <th key={col}>{col}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {currentPreview.data.map((row, idx) => (
+                                    <tr key={idx}>
+                                      <td className="preview-td-idx">{idx + 1}</td>
+                                      {ds.columns.map((col) => {
+                                        const val = row[col];
+                                        return (
+                                          <td key={col}>
+                                            {val === null || val === undefined ? (
+                                              <span className="preview-val-null">null</span>
+                                            ) : (
+                                              String(val)
+                                            )}
+                                          </td>
+                                        );
+                                      })}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="dataset-preview-empty">ไม่พบแถวข้อมูลในตารางนี้</div>
+                          )}
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ResponsiveContainer,
   BarChart,
@@ -16,7 +16,7 @@ import {
   CartesianGrid,
   Legend,
 } from 'recharts';
-import { BarChart3, TrendingUp, PieChart as PieIcon, Layers, Info, Camera, Check } from 'lucide-react';
+import { BarChart3, TrendingUp, PieChart as PieIcon, Layers, Info } from 'lucide-react';
 
 const COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
@@ -74,65 +74,12 @@ const CustomChartTooltip = ({ active, payload, label }) => {
 export default function ChartRenderer({ visualization }) {
   const initialType = visualization?.recommended_chart || 'bar';
   const [selectedChartType, setSelectedChartType] = useState(initialType);
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportSuccess, setExportSuccess] = useState(false);
-  const chartWrapperRef = useRef(null);
 
   useEffect(() => {
     if (visualization?.recommended_chart) {
       setSelectedChartType(visualization.recommended_chart);
     }
   }, [visualization]);
-
-  const handleExportPng = () => {
-    if (!chartWrapperRef.current || isExporting) return;
-    const svgElement = chartWrapperRef.current.querySelector('svg');
-    if (!svgElement) return;
-
-    try {
-      setIsExporting(true);
-      const svgString = new XMLSerializer().serializeToString(svgElement);
-      const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-      const URL = window.URL || window.webkitURL || window;
-      const blobURL = URL.createObjectURL(svgBlob);
-
-      const image = new Image();
-      image.onload = () => {
-        const canvas = document.createElement('canvas');
-        const scale = 2; // Retina 2x resolution
-        const width = (svgElement.clientWidth || 600) * scale;
-        const height = (svgElement.clientHeight || 300) * scale;
-        canvas.width = width;
-        canvas.height = height;
-
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(image, 0, 0, width, height);
-
-        URL.revokeObjectURL(blobURL);
-
-        const pngUrl = canvas.toDataURL('image/png');
-        const downloadLink = document.createElement('a');
-        downloadLink.download = `chart_${selectedChartType}_${Date.now()}.png`;
-        downloadLink.href = pngUrl;
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        document.body.removeChild(downloadLink);
-
-        setIsExporting(false);
-        setExportSuccess(true);
-        setTimeout(() => setExportSuccess(false), 2000);
-      };
-      image.onerror = () => {
-        setIsExporting(false);
-      };
-      image.src = blobURL;
-    } catch (err) {
-      console.error('Export PNG failed:', err);
-      setIsExporting(false);
-    }
-  };
 
   if (!visualization || visualization.recommended_chart === 'none') {
     return null;
@@ -170,7 +117,7 @@ export default function ChartRenderer({ visualization }) {
   }
 
   return (
-    <div className="chart-wrapper" ref={chartWrapperRef}>
+    <div className="chart-wrapper">
       {/* Chart Header & Interactive Switcher Toolbar */}
       <div className="chart-header-toolbar">
         <div className="chart-type-badge">
@@ -200,49 +147,35 @@ export default function ChartRenderer({ visualization }) {
           )}
         </div>
 
-        <div className="chart-actions-group">
-          {/* Chart Switcher Buttons */}
-          <div className="chart-switcher-group">
-            <button
-              className={`chart-switch-btn ${selectedChartType === 'bar' ? 'active' : ''}`}
-              onClick={() => setSelectedChartType('bar')}
-              title="สลับเป็นกราฟแท่ง (Bar Chart)"
-            >
-              <BarChart3 size={14} />
-            </button>
-            <button
-              className={`chart-switch-btn ${selectedChartType === 'line' ? 'active' : ''}`}
-              onClick={() => setSelectedChartType('line')}
-              title="สลับเป็นกราฟเส้น (Line Chart)"
-            >
-              <TrendingUp size={14} />
-            </button>
-            <button
-              className={`chart-switch-btn ${selectedChartType === 'pie' ? 'active' : ''}`}
-              onClick={() => setSelectedChartType('pie')}
-              title="สลับเป็นแผนภูมิวงกลม (Pie Chart)"
-            >
-              <PieIcon size={14} />
-            </button>
-            <button
-              className={`chart-switch-btn ${selectedChartType === 'area' ? 'active' : ''}`}
-              onClick={() => setSelectedChartType('area')}
-              title="สลับเป็นกราฟพื้นที่ (Area Chart)"
-            >
-              <Layers size={14} />
-            </button>
-          </div>
-
-          {/* Export Chart as PNG for Presentation */}
+        {/* Chart Switcher Buttons */}
+        <div className="chart-switcher-group">
           <button
-            type="button"
-            className={`chart-export-btn ${exportSuccess ? 'success' : ''}`}
-            onClick={handleExportPng}
-            disabled={isExporting}
-            title="ส่งออกกราฟเป็นรูปภาพ PNG คมชัดสูง (สำหรับทำสไลด์/พรีเซนต์)"
+            className={`chart-switch-btn ${selectedChartType === 'bar' ? 'active' : ''}`}
+            onClick={() => setSelectedChartType('bar')}
+            title="สลับเป็นกราฟแท่ง (Bar Chart)"
           >
-            {exportSuccess ? <Check size={13} /> : <Camera size={13} />}
-            <span>{exportSuccess ? 'บันทึกแล้ว' : isExporting ? 'กำลังบันทึก...' : 'PNG'}</span>
+            <BarChart3 size={14} />
+          </button>
+          <button
+            className={`chart-switch-btn ${selectedChartType === 'line' ? 'active' : ''}`}
+            onClick={() => setSelectedChartType('line')}
+            title="สลับเป็นกราฟเส้น (Line Chart)"
+          >
+            <TrendingUp size={14} />
+          </button>
+          <button
+            className={`chart-switch-btn ${selectedChartType === 'pie' ? 'active' : ''}`}
+            onClick={() => setSelectedChartType('pie')}
+            title="สลับเป็นแผนภูมิวงกลม (Pie Chart)"
+          >
+            <PieIcon size={14} />
+          </button>
+          <button
+            className={`chart-switch-btn ${selectedChartType === 'area' ? 'active' : ''}`}
+            onClick={() => setSelectedChartType('area')}
+            title="สลับเป็นกราฟพื้นที่ (Area Chart)"
+          >
+            <Layers size={14} />
           </button>
         </div>
       </div>
