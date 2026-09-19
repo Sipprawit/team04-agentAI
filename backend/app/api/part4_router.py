@@ -105,11 +105,12 @@ def update_session(session_id: str, data: Dict[str, Any] = Body(...)):
 
 @router.delete("/sessions/{session_id}")
 def delete_session(session_id: str):
-    """ลบ Session และข้อความทั้งหมดใน Session นั้น"""
+    """ลบ Session, ข้อความทั้งหมดใน Session นั้น และรายการปักหมุดที่เกี่ยวข้องกับ Session นี้"""
     _init_part4_tables()
     with engine.connect() as conn:
         conn.execute(text("DELETE FROM chat_messages WHERE session_id = :sid"), {"sid": session_id})
         conn.execute(text("DELETE FROM chat_sessions WHERE session_id = :sid"), {"sid": session_id})
+        conn.execute(text("DELETE FROM pinned_items WHERE content_json LIKE :pattern"), {"pattern": f'%"sessionId": "{session_id}"%'})
         conn.commit()
     return {"status": "success"}
 

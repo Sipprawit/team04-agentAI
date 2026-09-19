@@ -125,3 +125,37 @@ class TestPinnedItems:
         # ตรวจสอบว่าว่างเปล่าแล้ว
         get_resp2 = client.get("/part4/pinned-dashboard")
         assert len(get_resp2.json()["pinned_items"]) == 0
+
+    def test_delete_session_removes_associated_pinned_items(self):
+        session_id = "sess-to-be-deleted"
+        # สร้าง session
+        client.post("/part4/sessions", json={"session_id": session_id, "title": "ทดสอบปักหมุด"})
+
+        # ปักหมุด item ที่ผูกกับ session นี้
+        client.post("/part4/pin-item", json={
+            "title": "กราฟที่ผูกกับเซสชันนี้",
+            "sessionId": session_id,
+            "data": [1, 2, 3]
+        })
+
+        # ปักหมุด item ที่ผูกกับอีก session
+        client.post("/part4/pin-item", json={
+            "title": "กราฟของอีกเซสชัน",
+            "sessionId": "other-session",
+            "data": [4, 5, 6]
+        })
+
+        # ตรวจว่ามี 2 items ใน dashboard
+        list_resp = client.get("/part4/pinned-dashboard")
+        assert len(list_resp.json()["pinned_items"]) == 2
+
+        # ลบ session แรก
+        del_sess_resp = client.delete(f"/part4/sessions/{session_id}")
+        assert del_sess_resp.status_code == 200
+
+        # ตรวจว่า item ของ session แรกถูกลบไปด้วย เหลือเฉพาะของ other-session
+        after_resp = client.get("/part4/pinned-dashboard")
+        after_items = after_resp.json()["pinned_items"]
+        assert len(after_items) == 1
+        assert after_items[0]["title"] == "กราฟของอีกเซสชัน"
+

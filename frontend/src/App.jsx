@@ -26,6 +26,7 @@ import {
   fetchSchemaDict
 } from './services/chatService';
 import { pinItemToDashboard, unpinItem } from './services/dashboardService';
+import { fetchDatasets } from './services/uploadService';
 import ChatHistorySidebar from './components/chat/ChatHistorySidebar';
 import AnalyticsPanel from './components/dashboard/AnalyticsPanel';
 import MarkdownMessage from './components/chat/MarkdownMessage';
@@ -161,6 +162,7 @@ export default function App() {
   const [activeMessage, setActiveMessage] = useState(null);
   const [analyticsTab, setAnalyticsTab] = useState('insights'); // 'insights' | 'table' | 'pinned'
   const [suggestedQueries, setSuggestedQueries] = useState(DEFAULT_SUGGESTED_QUERIES);
+  const [hasUploadedDataset, setHasUploadedDataset] = useState(true);
 
   const messagesEndRef = useRef(null);
   const user = { name: 'ทีม 04 Data Analyst' };
@@ -371,6 +373,21 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isLoading]);
 
+  // ตรวจสอบว่ามีชุดข้อมูลที่อัปโหลดเข้ามาจริงอยู่ในระบบหรือไม่
+  const checkUploadedDatasetsAvailability = useCallback(async () => {
+    try {
+      const res = await fetchDatasets();
+      if (res && res.datasets) {
+        const uploaded = res.datasets.filter(d => d.is_uploaded);
+        setHasUploadedDataset(uploaded.length > 0);
+      }
+    } catch (_e) {}
+  }, []);
+
+  useEffect(() => {
+    checkUploadedDatasetsAvailability();
+  }, [checkUploadedDatasetsAvailability]);
+
   // ============================================
   // Chat Actions & Pipeline
   // ============================================
@@ -379,6 +396,16 @@ export default function App() {
     if (e) e.preventDefault();
     const queryToSend = queryTextOverride || input;
     if (!queryToSend.trim() || isLoading) return;
+
+    if (!hasUploadedDataset) {
+      setToast({
+        type: 'error',
+        title: 'ไม่พบชุดข้อมูลในระบบ',
+        message: 'ชุดข้อมูลถูกลบออกจากระบบแล้ว โปรดนำเข้าไฟล์ชุดข้อมูล (CSV) ใหม่เพื่อดำเนินการสอบถาม'
+      });
+      setIsUploadOpen(true);
+      return;
+    }
 
     const userMessage = {
       id: `usr_${Date.now()}`,
@@ -498,6 +525,15 @@ export default function App() {
       setIsUploadOpen(true);
       return;
     }
+    if (!hasUploadedDataset) {
+      setToast({
+        type: 'error',
+        title: 'ไม่พบชุดข้อมูลในระบบ',
+        message: 'ชุดข้อมูลถูกลบออกจากระบบแล้ว โปรดนำเข้าไฟล์ชุดข้อมูล (CSV) ใหม่เพื่อดำเนินการสอบถาม'
+      });
+      setIsUploadOpen(true);
+      return;
+    }
     handleSendMessage(null, sq);
   };
 
@@ -521,6 +557,8 @@ export default function App() {
     if (!msg) return;
     const newItem = {
       id: Date.now(),
+      sessionId: activeSession,
+      messageId: msg.id,
       title: `รายงานการวิเคราะห์ (${msg.timestamp || new Date().toLocaleTimeString('th-TH')})`,
       content: msg.text,
       sql: msg.sql,
@@ -602,6 +640,24 @@ export default function App() {
       await deleteSession(sessId);
     } catch (_e) {}
 
+    // Cascade delete pinned items associated with this session
+    const sessionMsgs = messagesBySession[sessId] || [];
+    const sessionMsgIds = new Set(sessionMsgs.map(m => m.id).filter(Boolean));
+    const sessionQueries = new Set(sessionMsgs.map(m => m.userQuery).filter(Boolean));
+
+    const pinsToDelete = pinnedItems.filter(p =>
+      p.sessionId === sessId ||
+      (p.messageId && sessionMsgIds.has(p.messageId)) ||
+      (p.userQuery && sessionQueries.has(p.userQuery))
+    );
+
+    pinsToDelete.forEach(p => {
+      unpinItem(p.id).catch(() => {});
+    });
+
+    const pinsToDeleteIds = new Set(pinsToDelete.map(p => p.id));
+    setPinnedItems(prev => prev.filter(p => !pinsToDeleteIds.has(p.id)));
+
     const remaining = sessions.filter(s => s.id !== sessId);
     setSessions(remaining);
     if (activeSession === sessId) {
@@ -621,7 +677,7 @@ export default function App() {
     setToast({
       type: 'info',
       title: 'ลบข้อมูลสำเร็จ',
-      message: 'ลบหัวข้อการสนทนาเรียบร้อยแล้ว'
+      message: 'ลบหัวข้อการสนทนาและรายการปักหมุดที่เกี่ยวข้องเรียบร้อยแล้ว'
     });
   };
 
@@ -691,6 +747,9 @@ export default function App() {
       'แสดงข้อมูล 10 รายการแรก',
     ]);
 
+    setHasUploadedDataset(true);
+    checkUploadedDatasetsAvailability();
+
     setToast({
       type: 'upload',
       title: 'นำเข้าข้อมูลเรียบร้อย',
@@ -713,6 +772,8 @@ export default function App() {
     fetchSchemaDict().then(data => {
       setSchemaDict(data || {});
     }).catch(() => {});
+
+    checkUploadedDatasetsAvailability();
   };
 
   // Helper for Column Type Badge colors
@@ -981,40 +1042,62 @@ export default function App() {
               </div>
             </div>
 
-            {/* Chat Input Bar with '+' CSV Upload Button */}
-            <form onSubmit={handleSendMessage} className="chat-input-container">
-              {/* CSV Upload '+' Button */}
-              <button
-                type="button"
-                onClick={() => setIsUploadOpen(true)}
-                className="chat-upload-plus-btn"
-                title="นำเข้าไฟล์ข้อมูล CSV (+)"
-                disabled={isLoading}
-              >
-                <Plus size={18} />
-              </button>
+            {/* Chat Input Bar or Locked Dataset Banner */}
+            {!hasUploadedDataset ? (
+              <div className="chat-input-locked-banner">
+                <div className="locked-banner-info">
+                  <div className="locked-icon-badge">
+                    <Database size={18} className="text-amber-600" />
+                  </div>
+                  <div className="locked-banner-text">
+                    <span className="locked-banner-title">ชุดข้อมูลถูกลบออกจากระบบแล้ว (แชทเก่ายังคงอยู่สำหรับดูย้อนหลัง)</span>
+                    <span className="locked-banner-subtext">ท่านสามารถคลิกดูประวัติการสนทนาย้อนหลังได้ แต่จะไม่สามารถส่งคำถามใหม่ได้จนกว่าจะนำเข้าไฟล์ชุดข้อมูลใหม่อีกครั้ง</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsUploadOpen(true)}
+                  className="locked-upload-action-btn"
+                >
+                  <Plus size={15} />
+                  <span>นำเข้าไฟล์ CSV อีกครั้ง</span>
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSendMessage} className="chat-input-container">
+                {/* CSV Upload '+' Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsUploadOpen(true)}
+                  className="chat-upload-plus-btn"
+                  title="นำเข้าไฟล์ข้อมูล CSV (+)"
+                  disabled={isLoading}
+                >
+                  <Plus size={18} />
+                </button>
 
-              {/* Text Input */}
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="พิมพ์คำถามวิเคราะห์ข้อมูล เช่น 'แจกแจงจำนวนรายการตามหมวดหมู่' หรือ 'สรุปสถิติสำคัญ'..."
-                disabled={isLoading}
-                className="chat-text-input"
-              />
+                {/* Text Input */}
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="พิมพ์คำถามวิเคราะห์ข้อมูล เช่น 'แจกแจงจำนวนรายการตามหมวดหมู่' หรือ 'สรุปสถิติสำคัญ'..."
+                  disabled={isLoading}
+                  className="chat-text-input"
+                />
 
-              {/* Send Button */}
-              <button
-                type="submit"
-                disabled={isLoading || !input.trim()}
-                className="chat-send-btn"
-                title="ส่งคำถาม"
-              >
-                <Send size={15} />
-                <span>ส่งคำถาม</span>
-              </button>
-            </form>
+                {/* Send Button */}
+                <button
+                  type="submit"
+                  disabled={isLoading || !input.trim()}
+                  className="chat-send-btn"
+                  title="ส่งคำถาม"
+                >
+                  <Send size={15} />
+                  <span>ส่งคำถาม</span>
+                </button>
+              </form>
+            )}
           </section>
 
           {/* DRAGGABLE RESIZER DIVIDER */}

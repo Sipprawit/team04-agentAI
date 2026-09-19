@@ -94,12 +94,23 @@ export default function ChatHistorySidebar({
               className={`session-item ${activeSession === sess.id ? 'active' : ''}`}
               onClick={() => onSelectSession(sess.id)}
               onContextMenu={(e) => handleContextMenu(e, sess.id)}
-              title="คลิกเพื่อเปิดบทสนทนานี้ หรือคลิกขวาเพื่อลบ"
+              title="คลิกเพื่อเปิดบทสนทนานี้"
             >
               <div className="session-item-content">
                 <span className="session-title">{sess.title}</span>
                 <span className="session-time">{sess.time || 'ล่าสุด'}</span>
               </div>
+              <button
+                type="button"
+                className="session-delete-icon-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onDeleteSession) onDeleteSession(sess.id);
+                }}
+                title="ลบการสนทนานี้และรายการที่ปักหมุดไว้"
+              >
+                <Trash2 size={12} />
+              </button>
             </div>
           ))}
         </div>
