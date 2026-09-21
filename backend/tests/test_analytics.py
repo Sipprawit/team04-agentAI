@@ -144,3 +144,60 @@ class TestChartFormatter:
         assert result["total_count"] == 30
         assert result["displayed_count"] == 20
         assert "20 รายการแรกจากทั้งหมด 30 รายการ" in result["truncation_label"]
+
+    def test_full_aggregation_when_hitting_limit_without_group_by(self, monkeypatch):
+        """ทางเลือก A: เมื่อ SQL ไม่มี GROUP BY และแถว = LIMIT ให้ยิง SQL หาผลรวมจริง"""
+        # สร้าง raw data 50 แถว
+        data = [{"description": f"item_{i % 5}", "value": 100} for i in range(50)]
+        sql = 'SELECT * FROM "products" WHERE "category" = \'rice\' LIMIT 50;'
+
+        aggregated_data = [
+            {"description": "item_0", "value": 150000},
+            {"description": "item_1", "value": 120000},
+            {"description": "item_2", "value": 90000},
+        ]
+
+        def mock_execute(query):
+            assert "GROUP BY" in query
+            assert "SUM" in query
+            return {"status": "success", "data": aggregated_data}
+
+        monkeypatch.setattr("app.part1_data_security.sandbox.sql_sandbox.execute_sql_in_sandbox", mock_execute)
+
+        result = format_visualization_payload(data, sql_query=sql)
+        assert result["recommended_chart"] == "bar"
+        assert result.get("is_full_aggregation") is True
+        assert len(result["chart_data"]) == 3
+        assert result["chart_data"][0]["value"] == 150000
+
+    def test_skips_aggregation_when_sql_has_group_by(self, monkeypatch):
+        """ถ้า SQL มี GROUP BY อยู่แล้ว ไม่ต้องยิงคำสั่งเพิ่ม"""
+        data = [{"category": "A", "total": 100}]
+        sql = 'SELECT category, SUM(val) as total FROM "products" GROUP BY category LIMIT 50;'
+
+        executed = []
+        def mock_execute(query):
+            executed.append(query)
+            return {"status": "success", "data": []}
+
+        monkeypatch.setattr("app.part1_data_security.sandbox.sql_sandbox.execute_sql_in_sandbox", mock_execute)
+
+        result = format_visualization_payload(data, sql_query=sql)
+        assert len(executed) == 0
+        assert result.get("is_full_aggregation") is not True
+
+    def test_skips_aggregation_when_not_hitting_limit(self, monkeypatch):
+        """ถ้าจำนวนแถวน้อยกว่า LIMIT แสดงว่าได้ข้อมูลครบแล้ว ไม่ต้องยิงคำสั่งเพิ่ม"""
+        data = [{"name": "item_1", "value": 100}, {"name": "item_2", "value": 200}]
+        sql = 'SELECT * FROM "products" LIMIT 50;'
+
+        executed = []
+        def mock_execute(query):
+            executed.append(query)
+            return {"status": "success", "data": []}
+
+        monkeypatch.setattr("app.part1_data_security.sandbox.sql_sandbox.execute_sql_in_sandbox", mock_execute)
+
+        result = format_visualization_payload(data, sql_query=sql)
+        assert len(executed) == 0
+        assert result.get("is_full_aggregation") is not True

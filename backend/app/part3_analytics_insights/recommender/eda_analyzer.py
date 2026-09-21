@@ -23,10 +23,8 @@ def is_metric_column(col_name: str, sample_values: list = None) -> bool:
     if any(p in col_lower for p in ["ลำดับ", "รหัส", "phone", "tel", "zipcode"]):
         return False
 
-    # 2. เช็คชื่อคอลัมน์ที่เป็นมิติของเวลา (Year, Date, Month)
-    if col_lower in DATE_PATTERNS:
-        return False
-    if col_lower in ["year", "ปี"] or any(p in col_lower for p in ["พ.ศ.", "ค.ศ."]):
+    # 2. เช็คชื่อคอลัมน์ที่เป็นมิติของเวลา (Year, Date, Month, Quarter)
+    if col_lower in DATE_PATTERNS or any(p in col_lower for p in ["month", "year", "date", "เวลา", "วันที่", "เดือน", "ปี", "ไตรมาส", "quarter"]):
         return False
 
     # 3. เช็คค่าตัวอย่าง หากค่าทั้งหมดมีลักษณะเป็นปี พ.ศ. หรือ ค.ศ.

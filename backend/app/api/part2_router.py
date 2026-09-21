@@ -476,7 +476,7 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
 
     # 6. แนะนำกราฟและจัดเตรียมข้อมูล X-Y (Part 3)
     try:
-        visualization = format_visualization_payload(raw_data)
+        visualization = format_visualization_payload(raw_data, sql_query=sql_query)
     except Exception as e:
         logger.error(f"Visualization payload error: {e}")
         visualization = None
