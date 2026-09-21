@@ -30,8 +30,12 @@ const CustomChartTooltip = ({ active, payload, label }) => {
     const value = payload[0].value;
     const name = dataObj.name || label || "ข้อมูล";
     
-    // ตรวจสอบหน่วย เช่น ร้อยละ หรือ %
-    const unit = dataObj.unit || (typeof value === 'number' && value <= 100 ? '%' : '');
+    // แสดงหน่วยเฉพาะเมื่อ Backend ส่ง unit มาชัดเจน — ห้ามเดาจากค่าตัวเลข
+    const unit = dataObj.unit || '';
+
+    // สำหรับ Pie Chart: recharts ส่ง percent มาใน payload
+    const isPieSlice = payload[0].percent !== undefined;
+    const realPercent = isPieSlice ? (payload[0].percent * 100).toFixed(1) : null;
 
     return (
       <div className="custom-chart-tooltip">
@@ -43,9 +47,15 @@ const CustomChartTooltip = ({ active, payload, label }) => {
           <div className="tooltip-row">
             <span className="tooltip-label">ค่าที่บันทึก:</span>
             <strong className="tooltip-value">
-              {typeof value === 'number' ? value.toLocaleString() : value} {unit}
+              {typeof value === 'number' ? value.toLocaleString() : value}{unit ? ` ${unit}` : ''}
             </strong>
           </div>
+          {isPieSlice && realPercent && (
+            <div className="tooltip-row">
+              <span className="tooltip-label">สัดส่วน:</span>
+              <span>{realPercent}%</span>
+            </div>
+          )}
           {dataObj.period_of_inv && dataObj.period_of_inv !== name && (
             <div className="tooltip-row">
               <span className="tooltip-label">ระยะเวลา:</span>
@@ -70,6 +80,7 @@ const CustomChartTooltip = ({ active, payload, label }) => {
   }
   return null;
 };
+
 
 export default function ChartRenderer({ visualization }) {
   const initialType = visualization?.recommended_chart || 'bar';
