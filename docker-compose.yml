@@ -14,9 +14,16 @@ services:
       - GROQ_API_KEY=${GROQ_API_KEY}
       - LLM_MODEL_NAME=${LLM_MODEL_NAME:-openai/gpt-oss-20b}
       - SQLITE_DB_PATH=/app/data/test.db
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-120}
     volumes:
       # Mount โฟลเดอร์ data เพื่อเก็บฐานข้อมูล SQLite test.db (ไม่ทับซอร์สโค้ดใน /app)
       - sqlite_data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - team04-network
 
@@ -34,7 +41,8 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - team04-network
 

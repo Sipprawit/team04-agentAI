@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # ตั้งค่า Database URL สำหรับ SQLite
@@ -16,6 +16,15 @@ engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
 )
 
+# ติดตั้ง SQLite PRAGMA (WAL mode + busy_timeout) เพื่อรองรับ Concurrent Requests ป้องกันฐานข้อมูลล็อค
+@event.listens_for(engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL;")
+    cursor.execute("PRAGMA synchronous=NORMAL;")
+    cursor.execute("PRAGMA busy_timeout=5000;")
+    cursor.close()
+
 # สร้าง SessionLocal class สำหรับคุยกับ Database
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -30,11 +39,11 @@ def get_db():
     finally:
         db.close()
 
-def init_db(reset: bool = True):
+def init_db(reset: bool = False):
     """
     สร้างตารางและ Seed ข้อมูลจำลองตอน Startup
     เมื่อ reset=True: จะล้างตารางทั้งหมดในฐานข้อมูล (รวมถึงตาราง CSV ชั่วคราว)
-    และสร้างข้อมูล Mock Data ชุดสะอาดใหม่เสมอ
+    เมื่อ reset=False (ค่าเริ่มต้นสำหรับ Production): รักษาตารางข้อมูลที่ผู้ใช้อัปโหลดไว้ และสร้างเฉพาะตารางเริ่มต้นที่ยังไม่มี
     """
     from app.models.mock_data import init_mock_db
     init_mock_db(reset=reset)

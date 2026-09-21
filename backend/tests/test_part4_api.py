@@ -159,3 +159,22 @@ class TestPinnedItems:
         assert len(after_items) == 1
         assert after_items[0]["title"] == "กราฟของอีกเซสชัน"
 
+
+class TestHealthAndProduction:
+    """ทดสอบ Health Check Endpoint และ Production Readiness Configurations"""
+
+    def test_health_check_endpoint(self):
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "healthy"
+        assert data["database"] == "connected"
+        assert "app_name" in data
+        assert "version" in data
+
+    def test_rate_limiter_exempts_health_endpoint(self):
+        # /health ต้องไม่ถูกนับในโควตา Rate Limit
+        for _ in range(5):
+            resp = client.get("/health")
+            assert resp.status_code == 200
+

@@ -23,7 +23,9 @@ async def lifespan(app: FastAPI):
     ทำงานก่อนที่แอปจะเริ่มรัน (Startup) และหลังแอปปิดตัวลง (Shutdown)
     """
     print("[Startup] Initializing database...")
-    init_db()
+    # ค่าเริ่มต้นไม่ลบตารางข้อมูลที่ผู้ใช้อัปโหลดไว้ หากต้องการรีเซ็ตให้ตั้ง RESET_DB_ON_STARTUP=true
+    reset_db_startup = os.getenv("RESET_DB_ON_STARTUP", "false").lower() == "true"
+    init_db(reset=reset_db_startup)
     
     # สร้างตาราง Part 4 (chat_sessions, chat_messages, pinned_items)
     _init_part4_tables()
@@ -46,10 +48,19 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# ตั้งค่า CORS Middleware อนุญาตให้ Frontend ยิง API ได้
+# ตั้งค่า CORS Middleware อนุญาตให้ Frontend ยิง API ได้ทุกสภาพแวดล้อม (Localhost, Docker, Production Domain)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost",
+        "http://127.0.0.1",
+        "*"
+    ],
+    allow_origin_regex=r"^https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -72,6 +83,25 @@ app.include_router(part1_router)
 app.include_router(part2_router)
 app.include_router(part3_router)
 app.include_router(part4_router)
+
+@app.get("/health")
+def health_check():
+    """Health check endpoint สำหรับ Docker, Load Balancer, Kubernetes, และ System Monitoring"""
+    db_status = "connected"
+    try:
+        from sqlalchemy import text
+        from app.db.database import engine
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1;"))
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+
+    return {
+        "status": "healthy" if db_status == "connected" else "degraded",
+        "database": db_status,
+        "app_name": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+    }
 
 @app.get("/")
 def root():

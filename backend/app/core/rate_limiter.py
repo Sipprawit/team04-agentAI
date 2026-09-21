@@ -1,12 +1,13 @@
-﻿import time
+import time
 import os
 from collections import defaultdict
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# กำหนดโควตาสูงสุดต่อ IP ต่อ 1 นาที (Default 30 คำขอ/นาที)
-RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "45"))
+# กำหนดโควตาสูงสุดต่อ IP ต่อ 1 นาที (Default 120 คำขอ/นาที เพื่อรองรับการเปิดแท็บและนำเสนออย่างราบรื่น)
+RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "true").lower() not in ("false", "0", "no")
+RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "120"))
 WINDOW_SECONDS = 60
 
 # เก็บประวัติ timestamp ของแต่ละ Client IP: {ip: [ts1, ts2, ...]}
@@ -18,6 +19,9 @@ def is_rate_limited(client_ip: str) -> tuple[bool, int]:
     ตรวจสอบว่า Client IP เกินโควตาคำขอหรือไม่
     คืนค่า (is_blocked, seconds_to_wait)
     """
+    if not RATE_LIMIT_ENABLED or RATE_LIMIT_PER_MINUTE <= 0:
+        return False, 0
+
     now = time.time()
     history = _IP_REQUEST_HISTORY[client_ip]
 
@@ -42,18 +46,29 @@ def clear_rate_limit_history():
 class ClientRateLimitMiddleware(BaseHTTPMiddleware):
     """
     FastAPI Middleware ตรวจสอบและจำกัดความถี่คำขอต่อ Client IP
-    ป้องกันการสแปมและปกป้องโควตา Groq API ให้ใช้งานได้อย่างทั่วถึง
+    รองรับทั้งการรันตรงและรันหลัง Reverse Proxy (Nginx/Docker) โดยดึง IP จริงจาก X-Forwarded-For
     """
 
     async def dispatch(self, request: Request, call_next):
-        # ข้าม Static endpoints, OpenAPI docs, และ testclient
+        # ข้าม Static endpoints, Health checks, OpenAPI docs, และ favicon
         path = request.url.path
-        if path in ("/", "/docs", "/openapi.json", "/favicon.ico"):
+        if path in ("/", "/health", "/docs", "/openapi.json", "/favicon.ico"):
             return await call_next(request)
 
-        # ข้ามการตรวจสอบระหว่างรัน Unit Test อัตโนมัติ
-        client_host = request.client.host if request.client else "unknown"
-        if client_host in ("testclient", "127.0.0.1_bypass_test") or os.getenv("TESTING", "").lower() == "true":
+        # ข้ามการตรวจสอบระหว่างรัน Unit Test อัตโนมัติ หรือเมื่อปิด Rate Limiter
+        if not RATE_LIMIT_ENABLED or os.getenv("TESTING", "").lower() == "true":
+            return await call_next(request)
+
+        # ตรวจสอบ Client IP ที่แท้จริง (ดึงจาก X-Forwarded-For หรือ X-Real-IP หากอยู่หลัง Nginx)
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            client_host = forwarded.split(",")[0].strip()
+        elif request.headers.get("x-real-ip"):
+            client_host = request.headers.get("x-real-ip")
+        else:
+            client_host = request.client.host if request.client else "unknown"
+
+        if client_host in ("testclient", "127.0.0.1_bypass_test"):
             return await call_next(request)
 
         blocked, wait_sec = is_rate_limited(client_host)

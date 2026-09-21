@@ -1050,8 +1050,16 @@ export default function App() {
                     <Database size={18} className="text-amber-600" />
                   </div>
                   <div className="locked-banner-text">
-                    <span className="locked-banner-title">ชุดข้อมูลถูกลบออกจากระบบแล้ว (แชทเก่ายังคงอยู่สำหรับดูย้อนหลัง)</span>
-                    <span className="locked-banner-subtext">ท่านสามารถคลิกดูประวัติการสนทนาย้อนหลังได้ แต่จะไม่สามารถส่งคำถามใหม่ได้จนกว่าจะนำเข้าไฟล์ชุดข้อมูลใหม่อีกครั้ง</span>
+                    <span className="locked-banner-title">
+                      {currentMessages.some(m => m.role === 'user' || m.isUploadNotice)
+                        ? 'ชุดข้อมูลถูกลบออกจากระบบแล้ว (แชทเก่ายังคงอยู่สำหรับดูย้อนหลัง)'
+                        : 'ยังไม่มีชุดข้อมูลในระบบ (กรุณานำเข้าไฟล์ CSV เพื่อเริ่มต้น)'}
+                    </span>
+                    <span className="locked-banner-subtext">
+                      {currentMessages.some(m => m.role === 'user' || m.isUploadNotice)
+                        ? 'ท่านสามารถคลิกดูประวัติการสนทนาย้อนหลังได้ แต่จะไม่สามารถส่งคำถามใหม่ได้จนกว่าจะนำเข้าไฟล์ชุดข้อมูลใหม่อีกครั้ง'
+                        : 'ระบบต้องการชุดข้อมูลสำหรับการสืบค้น กรุณานำเข้าไฟล์ CSV เพื่อเริ่มวิเคราะห์ข้อมูล แปลงภาษาเป็นคำสั่ง SQL และแสดงผลแผนภูมิ'}
+                    </span>
                   </div>
                 </div>
                 <button
@@ -1060,7 +1068,11 @@ export default function App() {
                   className="locked-upload-action-btn"
                 >
                   <Plus size={15} />
-                  <span>นำเข้าไฟล์ CSV อีกครั้ง</span>
+                  <span>
+                    {currentMessages.some(m => m.role === 'user' || m.isUploadNotice)
+                      ? 'นำเข้าไฟล์ CSV อีกครั้ง'
+                      : 'นำเข้าไฟล์ CSV เพื่อเริ่มต้น'}
+                  </span>
                 </button>
               </div>
             ) : (
