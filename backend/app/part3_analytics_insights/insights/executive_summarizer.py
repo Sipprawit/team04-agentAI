@@ -155,6 +155,8 @@ def generate_executive_insight(user_query: str, raw_data: list) -> str:
    - ห้ามเปลี่ยนหัวข้อเป็นเรื่อง "ยอดขาย", "สินค้า", "ลูกค้า" หากข้อมูลไม่ได้เกี่ยวข้องกับเรื่องเหล่านั้น
 7. **การรายงานค่าผิดปกติ (Anomalies / Outliers)**:
    - หากในสถิติระบุพบค่าผิดปกติ (anomalies) ให้ไฮไลต์รายการดังกล่าวใน Insight เพื่อให้เห็นประเด็นสำคัญ
+8. **การแจกแจงรายการ (Itemized List)**:
+   - หากข้อมูลเป็นรายการแจกแจงแต่ละรายการ (ไม่ใช่การรวมกลุ่มข้อมูล): ให้สรุปชื่อรายการและค่าตัวเลขสำคัญ ห้ามเขียนคำว่า "จำนวนรายการ 1" ซ้ำๆ ทุกหัวข้อ
 """
         system_msg = SystemMessage(
             content="You are a Data Analyst Assistant. Summarize the provided data as-is using the actual column names and values. "

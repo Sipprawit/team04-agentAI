@@ -1,4 +1,4 @@
-﻿"""
+"""
 Unit Tests สำหรับ SQL Prompt Builder (Part 2)
 ทดสอบการสร้าง Prompt เพื่อส่งให้ AI แปลงภาษาธรรมชาติเป็น SQL
 """
@@ -42,3 +42,11 @@ class TestSQLPromptBuilder:
         prompt = build_sql_prompt("แสดงข้อมูล")
         assert "ข้อบังคับอย่างเคร่งครัด" in prompt
         assert "SELECT" in prompt
+
+    def test_build_prompt_contains_keyword_filtering_and_itemized_rows(self):
+        prompt = build_sql_prompt("สรุปข้อมูลข้าวในเดือนแม่แบบที่ 1")
+        assert "การกรองคำสำคัญ / วัตถุ / สินค้าเฉพาะเจาะจง" in prompt
+        assert "LIKE '%คำสำคัญ%'" in prompt
+        assert "การแจกแจงตารางรายการ (Itemized Rows Breakdown)" in prompt
+        assert "ตารางแจกแจงรายการข้อมูล" in prompt
+        assert "รวมมูลค่า" in prompt
