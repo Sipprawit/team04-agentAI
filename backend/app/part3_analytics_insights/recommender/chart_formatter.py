@@ -71,6 +71,29 @@ def _find_columns(data: list) -> tuple:
     return dimension_keys, metric_keys
 
 
+def _pick_primary_metric(metric_keys: list) -> str:
+
+    """เลือกคอลัมน์ metric หลักโดยจัดลำดับความสำคัญ (มูลค่า/ยอดรวม > ราคา > ปริมาณ/จำนวน > สัดส่วน)"""
+    if not metric_keys:
+        return ""
+    priority_ranks = [
+        # Rank 1: ยอดรวม / มูลค่า / Total Value / Total Amount
+        {"value", "total", "amount", "sales", "มูลค่า", "ยอด", "งบประมาณ", "รายได้", "รายจ่าย"},
+        # Rank 2: ราคา / Price / ต้นทุน
+        {"price", "cost", "ราคา"},
+        # Rank 3: ปริมาณ / Quantity / Count / จำนวน
+        {"quantity", "count", "volume", "จำนวน", "ปริมาณ", "รายการ"},
+        # Rank 4: สัดส่วน / ร้อยละ / Percentage
+        {"สัดส่วน", "ร้อยละ", "percent", "share", "ratio", "proportion"},
+    ]
+    for rank_set in priority_ranks:
+        for mk in metric_keys:
+            mk_lower = mk.lower()
+            if mk_lower in rank_set or any(p in mk_lower for p in rank_set):
+                return mk
+    return metric_keys[0]
+
+
 def format_visualization_payload(data: list, sql_query: Optional[str] = None) -> dict:
     """
     จัดเตรียมโครงสร้างข้อมูลแกน X-Y และประเภทกราฟสำหรับส่งไปให้ Frontend เรนเดอร์ด้วย Recharts
@@ -123,13 +146,8 @@ def format_visualization_payload(data: list, sql_query: Optional[str] = None) ->
         x_axis_key = clean_dim_keys[0] if clean_dim_keys else list(first_row.keys())[0]
 
 
-    # กำหนดแกน Y (Metric): ลำดับความสำคัญคอลัมน์ยอดนิยม (value, total, price, etc.)
-    priority_metrics = {"value", "total", "amount", "sales", "price", "quantity", "count", "ยอด", "มูลค่า", "จำนวน", "สัดส่วน", "ร้อยละ"}
-    primary_y_key = metric_keys[0]
-    for mk in metric_keys:
-        if mk.lower() in priority_metrics or any(p in mk.lower() for p in priority_metrics):
-            primary_y_key = mk
-            break
+    # กำหนดแกน Y (Metric): เลือกลำดับความสำคัญคอลัมน์ยอดนิยม (มูลค่า/ยอดรวม > ราคา > ปริมาณ/จำนวน > สัดส่วน)
+    primary_y_key = _pick_primary_metric(metric_keys)
 
     # ==============================================================================
     # ทางเลือก A: ตรวจสอบว่าต้องยิง SQL เพิ่มแบบ COUNT/SUM โดยไม่มี LIMIT เพื่อหาผลรวมจริงหรือไม่
@@ -137,6 +155,7 @@ def format_visualization_payload(data: list, sql_query: Optional[str] = None) ->
     # ==============================================================================
     data_for_chart = data
     is_full_aggregation = False
+    aggregation_failed = False
 
     if sql_query and isinstance(sql_query, str):
         has_group_by = bool(re.search(r'\bGROUP\s+BY\b', sql_query, re.IGNORECASE))
@@ -153,7 +172,9 @@ def format_visualization_payload(data: list, sql_query: Optional[str] = None) ->
                         flags=re.IGNORECASE
                     ).rstrip(';')
 
-                    metric_sum_clauses = [f'SUM("{mk}") AS "{mk}"' for mk in metric_keys[:3]]
+                    # รับประกันว่า primary_y_key จะอยู่ใน SELECT list เสมอ ป้องกัน no such column ใน ORDER BY
+                    metrics_to_sum = [primary_y_key] + [mk for mk in metric_keys if mk != primary_y_key]
+                    metric_sum_clauses = [f'SUM("{mk}") AS "{mk}"' for mk in metrics_to_sum[:3]]
                     metric_select_str = ", ".join(metric_sum_clauses)
 
                     if x_axis_key and x_axis_key in first_row:
@@ -175,19 +196,29 @@ def format_visualization_payload(data: list, sql_query: Optional[str] = None) ->
                         data_for_chart = chart_res["data"]
                         is_full_aggregation = True
                         logger.info(f"Chart full aggregation executed successfully: {len(data_for_chart)} rows")
+                    else:
+                        aggregation_failed = True
+                        err_msg = chart_res.get("message", "Unknown sandbox error") if chart_res else "No response"
+                        logger.warning(f"Chart full aggregation query returned error: {err_msg}")
+                        data_for_chart = data
                 except Exception as e:
+                    aggregation_failed = True
                     logger.warning(f"Failed to execute chart full aggregation: {e}")
                     data_for_chart = data
 
     chart_type = recommend_chart_type(data_for_chart)
 
     if not data_for_chart or chart_type in ["none"]:
-        return {
+        res = {
             "recommended_chart": "none",
             "labels": [],
             "values": [],
             "chart_data": [],
         }
+        if aggregation_failed:
+            res["aggregation_failed"] = True
+            res["truncation_label"] = "⚠️ คำนวณผลรวมทั้งหมดไม่สำเร็จ แสดงจากชุดข้อมูลตัวอย่างที่สืบค้นได้"
+        return res
 
     # อัปเดตคอลัมน์ dimension / metric ตาม data_for_chart ที่ใช้จริง
     first_chart_row = data_for_chart[0]
@@ -206,12 +237,8 @@ def format_visualization_payload(data: list, sql_query: Optional[str] = None) ->
             ]
             x_axis_key = cat_keys[0] if cat_keys else clean_chart_dim[0]
     if chart_metric_keys:
-        for mk in chart_metric_keys:
-            if mk.lower() in priority_metrics or any(p in mk.lower() for p in priority_metrics):
-                primary_y_key = mk
-                break
-        else:
-            primary_y_key = chart_metric_keys[0]
+        primary_y_key = _pick_primary_metric(chart_metric_keys)
+
 
     # กรณี Summary Card (ผลลัพธ์ 1 แถว)
     if chart_type == "summary_card" and len(data_for_chart) == 1:
@@ -228,7 +255,11 @@ def format_visualization_payload(data: list, sql_query: Optional[str] = None) ->
         if is_full_aggregation:
             res["is_full_aggregation"] = True
             res["truncation_label"] = "ผลรวมจริงจากข้อมูลทั้งหมดในระบบ (ไม่มี LIMIT)"
+        if aggregation_failed:
+            res["aggregation_failed"] = True
+            res["truncation_label"] = "⚠️ คำนวณผลรวมอัตโนมัติไม่สำเร็จ แสดงจากชุดข้อมูลตัวอย่างที่สืบค้นได้"
         return res
+
 
     labels = []
     values = []
@@ -297,10 +328,24 @@ def format_visualization_payload(data: list, sql_query: Optional[str] = None) ->
 
     # กรณี Bar / Line / Area Chart: หากข้อมูลเกิน 20 รายการ ให้ตัดทอนเฉพาะ 20 รายการแรกเพื่อไม่ให้กราฟแออัด
     MAX_CHART_ITEMS = 20
-    if chart_type != "pie" and len(chart_data) > MAX_CHART_ITEMS:
+    if chart_type == "bar" and len(chart_data) > MAX_CHART_ITEMS:
+        # สำหรับ Bar chart: เรียงตามมูลค่าจากมากไปน้อยเพื่อแสดง 20 อันดับแรกที่มีค่าสูงสุด
+        chart_data = sorted(chart_data, key=lambda d: d.get("value", 0), reverse=True)[:MAX_CHART_ITEMS]
+        labels = [d["name"] for d in chart_data]
+        values = [d["value"] for d in chart_data]
+        is_truncated = True
+        truncation_label = f"แสดง {MAX_CHART_ITEMS} อันดับแรกที่มีมูลค่าสูงสุดจากทั้งหมด {total_count} รายการ (ดูข้อมูลครบถ้วนได้ในแท็บตารางข้อมูล)"
+    elif chart_type in ("line", "area") and len(chart_data) > MAX_CHART_ITEMS:
+        # สำหรับ Line / Area chart: คงลำดับเวลา/ลำดับเดิมไว้ตามเดิม (ห้าม sort by value เพราะจะทำลายลำดับเวลา)
         chart_data = chart_data[:MAX_CHART_ITEMS]
-        labels = labels[:MAX_CHART_ITEMS]
-        values = values[:MAX_CHART_ITEMS]
+        labels = [d["name"] for d in chart_data]
+        values = [d["value"] for d in chart_data]
+        is_truncated = True
+        truncation_label = f"แสดง {MAX_CHART_ITEMS} รายการแรกจากทั้งหมด {total_count} รายการ (ดูข้อมูลครบถ้วนได้ในแท็บตารางข้อมูล)"
+    elif chart_type not in ("pie", "bar", "line", "area") and len(chart_data) > MAX_CHART_ITEMS:
+        chart_data = chart_data[:MAX_CHART_ITEMS]
+        labels = [d["name"] for d in chart_data]
+        values = [d["value"] for d in chart_data]
         is_truncated = True
         truncation_label = f"แสดง {MAX_CHART_ITEMS} รายการแรกจากทั้งหมด {total_count} รายการ (ดูข้อมูลครบถ้วนได้ในแท็บตารางข้อมูล)"
 
@@ -321,8 +366,13 @@ def format_visualization_payload(data: list, sql_query: Optional[str] = None) ->
         if not truncation_label:
             result["truncation_label"] = "กราฟสรุปผลรวมจริงจากข้อมูลทั้งหมดในระบบ (ตารางข้อมูลแสดงตัวอย่างรายการ)"
 
+    if aggregation_failed:
+        result["aggregation_failed"] = True
+        result["truncation_label"] = "⚠️ คำนวณผลรวมทั้งหมดไม่สำเร็จ แสดงจากชุดข้อมูลตัวอย่างที่สืบค้นได้"
+
     if truncation_label:
         result["truncation_label"] = truncation_label
+
 
     active_metrics = chart_metric_keys or metric_keys
     if len(active_metrics) > 1:

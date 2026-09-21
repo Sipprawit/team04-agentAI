@@ -201,3 +201,83 @@ class TestChartFormatter:
         result = format_visualization_payload(data, sql_query=sql)
         assert len(executed) == 0
         assert result.get("is_full_aggregation") is not True
+
+    def test_full_aggregation_preserves_primary_y_key_with_many_metrics(self, monkeypatch):
+        """บั๊กหลัก: ถ้าตารางมีคอลัมน์ตัวเลขหลายตัว primary_y_key ('มูลค่า') ต้องไม่ถูกตัดทิ้ง"""
+        # มี 5 คอลัมน์ตัวเลข โดย 'มูลค่า' อยู่ท้ายสุด (index 4)
+        data = [
+            {"คำอธิบาย": f"ข้าว {i % 3}", "จำนวน": 10, "ราคาต่อหน่วย": 50, "ส่วนลด": 5, "ภาษี": 7, "มูลค่า": 450}
+            for i in range(50)
+        ]
+        sql = 'SELECT * FROM "สถิติการค้า" WHERE "คำอธิบาย" LIKE \'%ข้าว%\' LIMIT 50;'
+
+        captured_queries = []
+        def mock_execute(query):
+            captured_queries.append(query)
+            assert 'SUM("มูลค่า") AS "มูลค่า"' in query, "primary_y_key ต้องอยู่ใน SELECT list เสมอ"
+            assert 'ORDER BY "มูลค่า" DESC' in query
+            return {
+                "status": "success",
+                "data": [
+                    {"คำอธิบาย": "ข้าวหอม", "มูลค่า": 100000},
+                    {"คำอธิบาย": "ข้าวเหนียว", "มูลค่า": 50000},
+                ]
+            }
+
+        monkeypatch.setattr("app.part1_data_security.sandbox.sql_sandbox.execute_sql_in_sandbox", mock_execute)
+
+        result = format_visualization_payload(data, sql_query=sql)
+        assert len(captured_queries) == 1
+        assert result.get("is_full_aggregation") is True
+        assert result["y_axis_key"] == "มูลค่า"
+        assert result["chart_data"][0]["value"] == 100000
+
+    def test_aggregation_failed_flag_reported(self, monkeypatch):
+        """เมื่อ full-aggregation error ต้องเซ็ต aggregation_failed = True ไม่ error เงียบ"""
+        data = [{"description": f"item_{i}", "value": 100} for i in range(20)]
+        sql = 'SELECT * FROM "products" LIMIT 20;'
+
+        def mock_execute_fail(query):
+            raise RuntimeError("Database connection lost during chart aggregation")
+
+        monkeypatch.setattr("app.part1_data_security.sandbox.sql_sandbox.execute_sql_in_sandbox", mock_execute_fail)
+
+        result = format_visualization_payload(data, sql_query=sql)
+        assert result.get("aggregation_failed") is True
+        assert "⚠️" in result.get("truncation_label", "")
+        # ยังคง fallback กลับมาแสดงข้อมูล sample ให้ผู้ใช้ดูได้
+        assert len(result["chart_data"]) == 20
+        assert result["recommended_chart"] == "bar"
+
+    def test_bar_chart_truncation_sorts_by_value_descending(self):
+        """จุดรอง: Bar chart ที่เกิน 20 รายการต้องเรียงตามมูลค่าสูงสุดก่อนตัดทอน ไม่ตัดมั่ว"""
+        # สร้าง 24 รายการ (ช่วง 21-25 แนะนำ bar chart) โดยรายการที่มีค่าสูงสุดอยู่ท้ายๆ
+        data = [{"item": f"item_{i}", "value": 10} for i in range(22)]
+        data.append({"item": "top_item_1", "value": 99999})
+        data.append({"item": "top_item_2", "value": 88888})
+
+        result = format_visualization_payload(data)
+        assert result["recommended_chart"] == "bar"
+        assert len(result["chart_data"]) == 20
+        assert result["is_truncated"] is True
+        # รายการค่าสูงสุด 99999 และ 88888 ต้องติดอันดับ Top 20 แน่นอน
+        chart_names = [d["name"] for d in result["chart_data"]]
+        assert "top_item_1" in chart_names
+        assert "top_item_2" in chart_names
+        assert result["chart_data"][0]["name"] == "top_item_1"
+        assert result["chart_data"][0]["value"] == 99999
+        assert "20 อันดับแรกที่มีมูลค่าสูงสุด" in result["truncation_label"]
+
+
+    def test_line_chart_truncation_preserves_chronological_order(self):
+        """จุดรอง: Line chart (แกน X เป็นวันที่/เวลา) ต้องคงลำดับเวลา ห้าม sort by value"""
+        # วันที่ 1-30 โดยวันที่ 15 มีค่ายอดกระโดด
+        data = [{"date": f"2024-01-{i+1:02d}", "value": 1000 if i == 14 else (i + 1) * 10} for i in range(30)]
+
+        result = format_visualization_payload(data)
+        assert result["recommended_chart"] == "line"
+        assert len(result["chart_data"]) == 20
+        # ต้องเริ่มจากวันที่ 1 เรียงไปตามลำดับเวลา ไม่ใช่เรียงตามค่ากระโดด
+        assert result["chart_data"][0]["name"] == "2024-01-01"
+        assert result["chart_data"][1]["name"] == "2024-01-02"
+        assert result["chart_data"][19]["name"] == "2024-01-20"
