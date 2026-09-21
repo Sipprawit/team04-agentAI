@@ -35,7 +35,8 @@ class TestExecutiveSummarizer:
         summary = _fallback_summary("หายอดขายรวม", data, stats)
         assert "ผลการค้นหาข้อมูล" in summary
         assert "5,000" in summary
-        assert "1,000" in summary
+        assert "สูงสุด" in summary
+        assert "2,000" in summary
 
     def test_generate_executive_insight_mock(self, monkeypatch):
         class MockLLMResponse:

@@ -217,29 +217,31 @@ class TestAdvancedStatisticsAndAnomalies:
         ]
         stats = calculate_advanced_statistics(data)
         assert stats["median"] == 30.0
-        assert stats["std_dev"] > 0
         assert stats["average"] == 30.0
 
-    def test_anomaly_detection_flags_outliers(self):
+    def test_stats_no_longer_include_anomalies(self):
+        """ยืนยันว่าระบบสถิติไม่รายงาน anomalies อีกต่อไป (เพราะผู้ใช้ทั่วไปไม่ต้องการ)"""
         from app.part3_analytics_insights.insights.stat_calculator import calculate_advanced_statistics
-        # ข้อมูลปกติอยู่ระหว่าง 10-20 แต่มีค่ากระโดดไปที่ 500
         data = [
             {"item": "ปกติ 1", "amount": 10},
             {"item": "ปกติ 2", "amount": 12},
             {"item": "ปกติ 3", "amount": 15},
             {"item": "ปกติ 4", "amount": 14},
             {"item": "ปกติ 5", "amount": 11},
-            {"item": "กระโดดผิดปกติ", "amount": 500},
+            {"item": "กระโดดสูง", "amount": 500},
         ]
         stats = calculate_advanced_statistics(data)
-        assert "anomalies" in stats
-        assert len(stats["anomalies"]) > 0
-        top_anomaly = stats["anomalies"][0]
-        assert top_anomaly["value"] == 500
-        assert top_anomaly["label"] == "กระโดดผิดปกติ"
-        assert top_anomaly["type"] == "high"
+        assert "anomalies" not in stats
+        assert "std_dev" not in stats
+        # ยังคงมีสถิติพื้นฐานที่เป็นประโยชน์
+        assert stats["total"] == 562
+        assert stats["max"] == 500
+        assert stats["min"] == 10
+        assert "average" in stats
+        assert "median" in stats
 
-    def test_fallback_summary_includes_anomaly_note(self):
+    def test_fallback_summary_shows_basic_stats_only(self):
+        """ยืนยันว่า fallback summary แสดงเฉพาะสถิติพื้นฐาน ไม่มี anomaly"""
         from app.part3_analytics_insights.insights.executive_summarizer import _fallback_summary
         raw_data = [
             {"item": "ก", "amount": 10},
@@ -248,14 +250,21 @@ class TestAdvancedStatisticsAndAnomalies:
             {"item": "ง", "amount": 11},
         ]
         stats = {
+            "target_column": "amount",
             "total": 533,
+            "max": 500,
+            "min": 10,
             "average": 133.25,
             "median": 11.5,
-            "anomalies": [{"label": "ข", "value": 500, "type": "high", "ratio_to_avg": 3.8}]
+            "count": 4
         }
         summary = _fallback_summary("สรุปยอด", raw_data, stats)
-        assert "ข้อสังเกตค่าผิดปกติ" in summary
-        assert "500" in summary
+        assert "ยอดรวม" in summary
+        assert "สูงสุด" in summary
+        assert "ต่ำสุด" in summary
+        assert "ค่าผิดปกติ" not in summary
+        assert "Anomaly" not in summary
+        assert "เบี่ยงเบน" not in summary
 
 
 class TestSchemaRelevanceRanking:

@@ -1,7 +1,7 @@
 def calculate_advanced_statistics(data: list) -> dict:
     """
-    คำนวณหาสถิติเชิงลึก (ยอดรวม, สูงสุด/ต่ำสุด, ค่าเฉลี่ย, จำนวน)
-    ฉลาดในการเลือกคอลัมน์ตัวเลข: คัดกรอง id, _id, ลำดับ ออกจากการคำนวณ
+    คำนวณหาสถิติพื้นฐานที่เป็นประโยชน์ต่อผู้ใช้งาน (ยอดรวม, สูงสุด/ต่ำสุด, ค่าเฉลี่ย, จำนวน)
+    คัดกรอง id, _id, ลำดับ ออกจากการคำนวณ
     """
     if not data:
         return {}
@@ -49,41 +49,6 @@ def calculate_advanced_statistics(data: list) -> dict:
     else:
         median_val = (sorted_vals[n // 2 - 1] + sorted_vals[n // 2]) / 2.0
 
-    # คำนวณส่วนเบี่ยงเบนมาตรฐาน (Standard Deviation: SD)
-    if n >= 2:
-        variance = sum((x - avg_val) ** 2 for x in values) / (n - 1)
-        std_dev_val = variance ** 0.5
-    else:
-        std_dev_val = 0.0
-
-    # ตรวจจับค่าผิดปกติ (Outlier / Anomaly Detection)
-    anomalies = []
-    if n >= 4 and std_dev_val > 0:
-        # ค้นหาคอลัมน์ป้ายกำกับข้อความในแถวข้อมูล (เช่น ชื่อ, หมวด, รายการ)
-        label_key = None
-        for k, v in first_row.items():
-            if isinstance(v, str) and k != target_key and not k.lower().endswith("id"):
-                label_key = k
-                break
-
-        for row in data:
-            val = row.get(target_key)
-            if isinstance(val, (int, float)):
-                is_high = (val - avg_val) >= (2.0 * std_dev_val) or (avg_val > 0 and val >= 3.0 * avg_val)
-                is_low = (avg_val - val) >= (2.0 * std_dev_val) and (avg_val > 0 and val < avg_val / 3.0)
-                if is_high or is_low:
-                    label_name = str(row.get(label_key, "")) if label_key else ""
-                    anomalies.append({
-                        "column": target_key,
-                        "label": label_name,
-                        "value": round(val, 2),
-                        "type": "high" if is_high else "low",
-                        "ratio_to_avg": round(val / avg_val, 1) if avg_val > 0 else 0
-                    })
-
-        # คัดเฉพาะรายการที่มีความเบี่ยงเบนสูงสุด 3 อันดับแรก
-        anomalies = sorted(anomalies, key=lambda a: abs(a["value"] - avg_val), reverse=True)[:3]
-
     stats_summary = {
         "target_column": target_key,
         "total": round(total_val, 2),
@@ -91,8 +56,7 @@ def calculate_advanced_statistics(data: list) -> dict:
         "min": round(min_val, 2),
         "average": round(avg_val, 2),
         "median": round(median_val, 2),
-        "std_dev": round(std_dev_val, 2),
-        "anomalies": anomalies,
         "count": len(values)
     }
     return stats_summary
+

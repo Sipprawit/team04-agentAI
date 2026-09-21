@@ -97,19 +97,10 @@ def _fallback_summary(user_query: str, raw_data: list, stats: dict) -> str:
     if count > 6:
         lines.append(f"- และอีก {count - 6} รายการ...")
 
-    if "total" in stats and "average" in stats:
+    if "total" in stats and "max" in stats:
         u_suffix = f" {unit_val}" if unit_val else ""
-        median_info = f", มัธยฐาน = {stats.get('median'):,}{u_suffix}" if "median" in stats else ""
-        lines.append(f"\n📊 **สถิติสำคัญ**: ยอดรวม = {stats.get('total'):,}{u_suffix}, ค่าเฉลี่ย = {stats.get('average'):,}{u_suffix}{median_info}")
-
-    anomalies = stats.get("anomalies", [])
-    if anomalies:
-        anomaly_items = []
-        for a in anomalies:
-            lbl = f"'{a['label']}' " if a.get("label") else ""
-            factor = f" (สูงกว่าค่าเฉลี่ย {a['ratio_to_avg']} เท่า)" if a["type"] == "high" and a.get("ratio_to_avg") else ""
-            anomaly_items.append(f"{lbl}มีค่า {a['value']:,}{u_suffix if unit_val else ''}{factor}")
-        lines.append(f"💡 **ข้อสังเกตค่าผิดปกติ (Anomaly / Outlier)**: ตรวจพบรายการที่เบี่ยงเบนสูง: " + "; ".join(anomaly_items))
+        target_col = stats.get("target_column", "ค่า")
+        lines.append(f"\n📊 **สรุปตัวเลข ({target_col})**: ยอดรวม = {stats.get('total'):,}{u_suffix}, สูงสุด = {stats.get('max'):,}{u_suffix}, ต่ำสุด = {stats.get('min'):,}{u_suffix}")
 
     return "\n".join(lines)
 
@@ -128,11 +119,11 @@ def generate_executive_insight(user_query: str, raw_data: list) -> str:
         llm = get_llm()
         sample_data = raw_data[:15]
 
-        summary_prompt = f"""คุณคือ Data Analyst Assistant ผู้เชี่ยวชาญด้านการวิเคราะห์ข้อมูลและสรุปรายงานเชิงสถิติ
+        summary_prompt = f"""คุณคือ Data Analyst Assistant ผู้เชี่ยวชาญด้านการสรุปรายงานข้อมูล
 คำถามจากผู้ใช้: "{user_query}"
 ข้อมูลที่ดึงจากฐานข้อมูล (ซึ่งผ่านการกรองเงื่อนไขตามคำถามมาแล้ว): {sample_data}
 จำนวนข้อมูลทั้งหมดที่พบ: {len(raw_data)} รายการ
-สถิติที่คำนวณเพิ่มเติม (รวมมัธยฐานและค่ากระโดดผิดปกติ): {stats}
+สถิติพื้นฐาน: {stats}
 
 จงสรุปและรายงานผลลัพธ์ข้อมูลที่ได้รับมานี้โดยยึดข้อบังคับอย่างเคร่งครัด:
 
@@ -143,19 +134,18 @@ def generate_executive_insight(user_query: str, raw_data: list) -> str:
 3. **โครงสร้างการตอบ**:
    - **Headline (บรรทัดแรก)**: สรุปผลลัพธ์หลัก 1 บรรทัด (ใช้ Markdown **ตัวหนา**)
    - **Details**: รายละเอียดสำคัญโดยใช้ Bullet points (`- ...`) แสดงหมวดหมู่/รายชื่อและค่าตัวเลข
-   - **Insight**: ข้อสังเกตที่เป็นประโยชน์ 1 บรรทัดสั้นๆ (หากมีค่าผิดปกติ Anomalies ให้หยิบยกมาเตือนในส่วนนี้)
+   - **Insight**: ข้อสังเกตสั้นๆ 1 บรรทัดที่เป็นประโยชน์ต่อผู้ใช้ เช่น "รายการที่มีจำนวนสูงสุดคือ..." หรือ "ยอดรวมทั้งหมดคือ..." (ห้ามรายงานค่าเบี่ยงเบนมาตรฐาน, ค่าผิดปกติ, หรือศัพท์สถิติเชิงวิชาการ)
 4. **ข้อบังคับด้านรูปแบบ**:
    - ห้ามเกริ่นนำหรือลงท้าย ให้เข้าเรื่องที่ Headline ทันที
-   - ใช้ภาษาไทยที่กระชับ เป็นทางการ และอ่านง่าย
+   - ใช้ภาษาไทยที่กระชับ เป็นทางการ และอ่านง่ายสำหรับผู้ใช้งานทั่วไป
+   - ห้ามใช้ศัพท์สถิติเชิงวิชาการ เช่น ค่าเบี่ยงเบนมาตรฐาน, Outlier, Anomaly, Z-score ฯลฯ
 5. **ตัวเลขทุกตัวที่มากกว่า 999 ต้องแสดงเครื่องหมายลูกน้ำ (comma separator) เสมอ**:
    - เช่น 1,234,567.89 (ห้ามเขียน 1234567.89), 50,000 (ห้ามเขียน 50000)
 6. **ห้ามสมมติบริบทหรือเปลี่ยนหัวข้อข้อมูล**:
    - ให้ใช้ชื่อคอลัมน์และข้อมูลจริงที่ได้รับมาเท่านั้น
    - หากข้อมูลเป็นเรื่องงบประมาณ ให้สรุปเรื่องงบประมาณ, หากเป็นเรื่องร้านอาหาร ให้สรุปเรื่องร้านอาหาร
    - ห้ามเปลี่ยนหัวข้อเป็นเรื่อง "ยอดขาย", "สินค้า", "ลูกค้า" หากข้อมูลไม่ได้เกี่ยวข้องกับเรื่องเหล่านั้น
-7. **การรายงานค่าผิดปกติ (Anomalies / Outliers)**:
-   - หากในสถิติระบุพบค่าผิดปกติ (anomalies) ให้ไฮไลต์รายการดังกล่าวใน Insight เพื่อให้เห็นประเด็นสำคัญ
-8. **การแจกแจงรายการ (Itemized List)**:
+7. **การแจกแจงรายการ (Itemized List)**:
    - หากข้อมูลเป็นรายการแจกแจงแต่ละรายการ (ไม่ใช่การรวมกลุ่มข้อมูล): ให้สรุปชื่อรายการและค่าตัวเลขสำคัญ ห้ามเขียนคำว่า "จำนวนรายการ 1" ซ้ำๆ ทุกหัวข้อ
 """
         system_msg = SystemMessage(
