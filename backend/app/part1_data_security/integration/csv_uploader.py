@@ -1,4 +1,5 @@
 import csv
+import datetime
 import re
 from sqlalchemy import text
 from app.db.database import engine
@@ -7,7 +8,7 @@ from app.db.database import engine
 # ข้อจำกัดด้านความปลอดภัย
 # ============================================
 MAX_FILE_SIZE_MB = 10
-ALLOWED_EXTENSIONS = {".csv"}
+ALLOWED_EXTENSIONS = {".csv", ".tsv", ".txt", ".xlsx", ".xls"}
 
 # รายการ Encoding ที่รองรับ (เรียงตามลำดับความน่าจะเป็น)
 # cp874 และ tis-620 เป็น Encoding ภาษาไทยที่ Microsoft Excel บน Windows ใช้เป็นค่าเริ่มต้น
@@ -69,8 +70,135 @@ def _read_csv_with_fallback(file_path: str):
     raise ValueError(f"ไม่สามารถถอดรหัสตัวอักษรของไฟล์ CSV ได้ (สาเหตุ: {last_error}) กรุณาบันทึกเป็น UTF-8 หรือ Windows Thai (CP874)")
 
 
+def _read_tsv_txt_with_fallback(file_path: str, ext: str):
+    """
+    อ่านไฟล์ TSV หรือ Text ที่คั่นด้วย Tab, Pipe, Comma หรือ Semicolon
+    พร้อม Auto-Encoding Detection สำหรับภาษาไทย
+    """
+    last_error = None
+    for enc in ENCODINGS_TO_TRY:
+        try:
+            with open(file_path, mode="r", encoding=enc, newline="") as f:
+                if ext == ".tsv":
+                    delimiter = "\t"
+                else:
+                    sample = f.read(2048)
+                    f.seek(0)
+                    if "\t" in sample:
+                        delimiter = "\t"
+                    elif "|" in sample:
+                        delimiter = "|"
+                    elif ";" in sample:
+                        delimiter = ";"
+                    else:
+                        delimiter = ","
+
+                reader = csv.reader(f, delimiter=delimiter)
+                try:
+                    raw_headers = next(reader)
+                except StopIteration:
+                    return [], [], enc
+                rows = list(reader)
+                return raw_headers, rows, enc
+        except (UnicodeDecodeError, UnicodeError) as e:
+            last_error = e
+            continue
+        except Exception as e:
+            last_error = e
+            break
+
+    raise ValueError(f"ไม่สามารถถอดรหัสตัวอักษรของไฟล์ {ext} ได้ (สาเหตุ: {last_error})")
+
+
+def _read_excel(file_path: str, ext: str):
+    """
+    อ่านไฟล์ Excel (.xlsx, .xls) โดยดึงข้อมูลจากชีตแรก (Active Sheet)
+    รองรับภาษาไทย และแปลงวันที่และตัวเลขให้อยู่ในรูปแบบที่ถูกต้อง
+    """
+    if ext == ".xlsx":
+        try:
+            import openpyxl
+        except ImportError:
+            raise ImportError("ไม่พบไลบรารี openpyxl สำหรับอ่านไฟล์ .xlsx (กรุณาติดตั้งด้วย pip install openpyxl)")
+
+        try:
+            wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
+            ws = wb.active
+            raw_headers = []
+            rows = []
+
+            for r_idx, row in enumerate(ws.iter_rows(values_only=True)):
+                if r_idx == 0:
+                    raw_headers = [
+                        str(cell).strip() if cell is not None and str(cell).strip() != ""
+                        else f"col_{i+1}"
+                        for i, cell in enumerate(row)
+                    ]
+                else:
+                    if all(cell is None or str(cell).strip() == "" for cell in row):
+                        continue
+                    formatted_row = []
+                    for cell in row:
+                        if cell is None:
+                            formatted_row.append("")
+                        elif isinstance(cell, (datetime.datetime, datetime.date)):
+                            formatted_row.append(cell.strftime("%Y-%m-%d"))
+                        elif isinstance(cell, float):
+                            if cell.is_integer():
+                                formatted_row.append(str(int(cell)))
+                            else:
+                                formatted_row.append(str(cell))
+                        else:
+                            formatted_row.append(str(cell).strip())
+
+                    if len(formatted_row) < len(raw_headers):
+                        formatted_row += [""] * (len(raw_headers) - len(formatted_row))
+                    rows.append(formatted_row[:len(raw_headers)])
+
+            wb.close()
+            return raw_headers, rows, "Excel (.xlsx) - UTF-8"
+        except Exception as e:
+            raise ValueError(f"เกิดข้อผิดพลาดในการอ่านไฟล์ Excel (.xlsx): {str(e)}")
+
+    elif ext == ".xls":
+        try:
+            import xlrd
+            wb = xlrd.open_workbook(file_path)
+            sheet = wb.sheet_by_index(0)
+            if sheet.nrows == 0:
+                return [], [], "Excel (.xls)"
+            raw_headers = [str(sheet.cell_value(0, c)).strip() or f"col_{c+1}" for c in range(sheet.ncols)]
+            rows = []
+            for r in range(1, sheet.nrows):
+                row_vals = [str(sheet.cell_value(r, c)).strip() for c in range(sheet.ncols)]
+                if all(v == "" for v in row_vals):
+                    continue
+                rows.append(row_vals)
+            return raw_headers, rows, "Excel (.xls)"
+        except ImportError:
+            raise ValueError("ระบบรองรับไฟล์ Excel รุ่นใหม่ (.xlsx) เป็นหลัก กรุณาบันทึกไฟล์เป็น .xlsx หรือติดตั้ง xlrd")
+        except Exception as e:
+            raise ValueError(f"เกิดข้อผิดพลาดในการอ่านไฟล์ .xls: {str(e)}")
+
+    raise ValueError(f"นามสกุลไฟล์ {ext} ไม่รองรับสำหรับการอ่านแบบ Excel")
+
+
+def _read_file_data(file_path: str):
+    """Dispatcher เพื่ออ่านข้อมูลตามนามสกุลไฟล์"""
+    ext = "." + file_path.rsplit(".", 1)[-1].lower() if "." in file_path else ""
+    if ext == ".csv":
+        return _read_csv_with_fallback(file_path)
+    elif ext in (".tsv", ".txt"):
+        return _read_tsv_txt_with_fallback(file_path, ext)
+    elif ext in (".xlsx", ".xls"):
+        return _read_excel(file_path, ext)
+    else:
+        raise ValueError(f"นามสกุลไฟล์ {ext} ไม่รองรับ (อนุญาตเฉพาะ {', '.join(ALLOWED_EXTENSIONS)})")
+
+
 # ชุดค่าว่างและ placeholder ที่พบบ่อยในไฟล์ CSV เช่น -, N/A, NA, null, nil
 NA_PLACEHOLDERS = {"", "-", "--", "—", "n/a", "na", "null", "none", "nil", "nan", "."}
+
 
 
 def _detect_column_type(values: list) -> str:
@@ -205,10 +333,11 @@ def detect_pii(headers: list, rows: list) -> list:
     return warnings
 
 
-def upload_csv_to_db(file_path: str, table_name: str) -> dict:
+def upload_file_to_db(file_path: str, table_name: str) -> dict:
     """
     ระบบการนำเข้าข้อมูลและจัดการโครงสร้าง (Data Integration & Schema Mapping System)
-    - อ่านไฟล์ CSV ด้วย Auto-Encoding Detection (รองรับทั้ง UTF-8 และ CP874 / TIS-620 ภาษาไทย)
+    - รองรับไฟล์ CSV, TSV, TXT, Excel (.xlsx, .xls)
+    - Auto-Encoding Detection สำหรับภาษาไทย (UTF-8, CP874, TIS-620)
     - ตรวจจับชนิดข้อมูลอัตโนมัติ (INTEGER, REAL, DATE, TEXT)
     - ป้องกัน SQL Injection ด้วยการ Sanitize ชื่อตารางและชื่อคอลัมน์ (รองรับภาษาไทย)
     - ตรวจสอบนามสกุลไฟล์และขนาดไฟล์
@@ -231,9 +360,9 @@ def upload_csv_to_db(file_path: str, table_name: str) -> dict:
 
         table_clean = sanitize_identifier(table_name)
 
-        # --- อ่าน CSV พร้อม Fallback Encoding อัตโนมัติ ---
+        # --- อ่านข้อมูลไฟล์ตามนามสกุลพร้อม Fallback อัตโนมัติ ---
         try:
-            raw_headers, rows, used_encoding = _read_csv_with_fallback(file_path)
+            raw_headers, rows, used_encoding = _read_file_data(file_path)
         except Exception as e:
             return {
                 "status": "error",
@@ -241,10 +370,10 @@ def upload_csv_to_db(file_path: str, table_name: str) -> dict:
             }
 
         if not raw_headers:
-            return {"status": "error", "message": "CSV file has no headers"}
+            return {"status": "error", "message": "ไฟล์ที่อัปโหลดไม่มีหัวตาราง (Headers)"}
 
         if not rows:
-            return {"status": "error", "message": "CSV file has no data rows"}
+            return {"status": "error", "message": "ไฟล์ที่อัปโหลดไม่มีข้อมูล (Data rows)"}
 
         # --- Sanitize ชื่อคอลัมน์เพื่อป้องกัน SQL Injection ---
         headers = []
@@ -331,5 +460,10 @@ def upload_csv_to_db(file_path: str, table_name: str) -> dict:
     except Exception as e:
         return {
             "status": "error",
-            "message": f"Failed to import CSV: {str(e)}"
+            "message": f"Failed to import file: {str(e)}"
         }
+
+
+# รักษาความเข้ากันได้ย้อนหลัง 100% สำหรับโค้ดที่ import upload_csv_to_db
+upload_csv_to_db = upload_file_to_db
+

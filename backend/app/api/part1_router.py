@@ -4,18 +4,19 @@ import os
 import uuid
 from sqlalchemy import text
 from app.db.database import engine
-from app.part1_data_security.integration.csv_uploader import upload_csv_to_db, validate_file_extension, ALLOWED_EXTENSIONS, sanitize_identifier
+from app.part1_data_security.integration.csv_uploader import upload_file_to_db, upload_csv_to_db, validate_file_extension, ALLOWED_EXTENSIONS, sanitize_identifier
 from app.part1_data_security.integration.schema_inspector import get_database_schema_info, get_schema_dict
 from app.part1_data_security.sandbox.audit_logger import get_audit_logs, get_audit_stats
 
 router = APIRouter(prefix="/part1", tags=["Part 1: Data & Security"])
 
 
+@router.post("/upload-file")
 @router.post("/upload-csv")
-async def upload_csv(file: UploadFile = File(...), table_name: str = Form(...)):
+async def upload_file(file: UploadFile = File(...), table_name: str = Form(...)):
     """
-    อัปโหลดไฟล์ CSV และบันทึกลงฐานข้อมูล
-    - ตรวจสอบนามสกุลไฟล์ (เฉพาะ .csv)
+    อัปโหลดไฟล์ข้อมูล (CSV, TSV, TXT, Excel .xlsx/.xls) และบันทึกลงฐานข้อมูล
+    - ตรวจสอบนามสกุลไฟล์ (.csv, .tsv, .txt, .xlsx, .xls)
     - ใช้ UUID สำหรับชื่อไฟล์ temp ป้องกัน Path Traversal
     - ตรวจจับชนิดข้อมูลอัตโนมัติ (INTEGER, REAL, DATE, TEXT)
     """
@@ -27,14 +28,15 @@ async def upload_csv(file: UploadFile = File(...), table_name: str = Form(...)):
 
     temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "temp_uploads")
     os.makedirs(temp_dir, exist_ok=True)
-    safe_filename = f"{uuid.uuid4().hex}.csv"
+    ext = "." + file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ".csv"
+    safe_filename = f"{uuid.uuid4().hex}{ext}"
     file_path = os.path.join(temp_dir, safe_filename)
 
     try:
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        result = upload_csv_to_db(file_path, table_name)
+        result = upload_file_to_db(file_path, table_name)
 
         if result["status"] == "error":
             raise HTTPException(status_code=400, detail=result["message"])

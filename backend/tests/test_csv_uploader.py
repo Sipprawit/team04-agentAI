@@ -118,6 +118,12 @@ class TestFileValidation:
     def test_invalid_extension_py(self):
         assert validate_file_extension("script.py") is False
 
+    def test_valid_new_extensions(self):
+        assert validate_file_extension("data.tsv") is True
+        assert validate_file_extension("data.txt") is True
+        assert validate_file_extension("report.xlsx") is True
+        assert validate_file_extension("archive.xls") is True
+
     def test_empty_filename(self):
         assert validate_file_extension("") is False
 
@@ -132,7 +138,7 @@ class TestFileValidation:
 
 
 class TestCSVUpload:
-    """ทดสอบการอัปโหลด CSV ลงฐานข้อมูล"""
+    """ทดสอบการอัปโหลดไฟล์ (CSV, TSV, TXT, Excel .xlsx) ลงฐานข้อมูล"""
 
     def test_upload_simple_csv(self):
         csv_content = "name,price,quantity\nLaptop,45000,10\nMouse,500,50\nKeyboard,1200,30\n"
@@ -165,12 +171,84 @@ class TestCSVUpload:
                 conn.execute(text('DROP TABLE IF EXISTS "test_upload_thai";'))
                 conn.commit()
 
-    def test_reject_non_csv_file(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-            f.write("not a csv")
+    def test_upload_tsv_file(self):
+        """ทดสอบอัปโหลดไฟล์ TSV (คั่นด้วย Tab) พร้อมภาษาไทย"""
+        tsv_content = "สินค้า\tราคา\tจำนวน\nข้าวหอมมะลิ\t1500\t10\nข้าวเหนียว\t800\t25\n"
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False, encoding="utf-8") as f:
+            f.write(tsv_content)
+            temp_path = f.name
+        try:
+            result = upload_csv_to_db(temp_path, "test_upload_tsv")
+            assert result["status"] == "success"
+            assert result["row_count"] == 2
+            assert "สินค้า" in result["columns"]
+            assert result["detected_types"]["ราคา"] == "INTEGER"
+        finally:
+            os.unlink(temp_path)
+            with engine.connect() as conn:
+                conn.execute(text('DROP TABLE IF EXISTS "test_upload_tsv";'))
+                conn.commit()
+
+    def test_upload_txt_delimited_file(self):
+        """ทดสอบอัปโหลดไฟล์ TXT (คั่นด้วยเครื่องหมาย Pipe '|')"""
+        txt_content = "code|product_name|price\nPROD-01|เครื่องดูดฝุ่น|2990.50\nPROD-02|พัดลมไอเย็น|1890.00\n"
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
+            f.write(txt_content)
+            temp_path = f.name
+        try:
+            result = upload_csv_to_db(temp_path, "test_upload_txt")
+            assert result["status"] == "success"
+            assert result["row_count"] == 2
+            assert "product_name" in result["columns"]
+            assert result["detected_types"]["price"] == "REAL"
+        finally:
+            os.unlink(temp_path)
+            with engine.connect() as conn:
+                conn.execute(text('DROP TABLE IF EXISTS "test_upload_txt";'))
+                conn.commit()
+
+    def test_upload_xlsx_file(self):
+        """ทดสอบอัปโหลดไฟล์ Excel (.xlsx) ด้วย openpyxl"""
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["รหัส", "ชื่อโครงการ", "งบประมาณ", "วันที่เริ่ม"])
+        ws.append([101, "โครงการชลประทาน", 5000000, "2024-01-15"])
+        ws.append([102, "โครงการพัฒนาถนน", 12000000, "2024-02-20"])
+        ws.append([103, "โครงการสวนสาธารณะ", 3500000, "2024-03-01"])
+
+        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
+            temp_path = f.name
+        wb.save(temp_path)
+        wb.close()
+
+        try:
+            result = upload_csv_to_db(temp_path, "test_upload_xlsx")
+            assert result["status"] == "success"
+            assert result["row_count"] == 3
+            assert "ชื่อโครงการ" in result["columns"]
+            assert result["detected_types"]["งบประมาณ"] == "INTEGER"
+            assert result["detected_types"]["วันที่เริ่ม"] == "DATE"
+
+            # ยืนยันข้อมูลใน SQLite
+            with engine.connect() as conn:
+                res = conn.execute(text('SELECT SUM("งบประมาณ") FROM "test_upload_xlsx";')).scalar()
+                assert res == 20500000
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            with engine.connect() as conn:
+                conn.execute(text('DROP TABLE IF EXISTS "test_upload_xlsx";'))
+                conn.commit()
+
+    def test_reject_disallowed_file(self):
+        """ทดสอบปฏิเสธไฟล์นามสกุลที่ไม่อนุญาต เช่น .pdf, .exe"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".pdf", delete=False) as f:
+            f.write("not an allowed file")
             temp_path = f.name
         try:
             result = upload_csv_to_db(temp_path, "test_rejected")
             assert result["status"] == "error"
+            assert "not allowed" in result["message"].lower()
         finally:
             os.unlink(temp_path)

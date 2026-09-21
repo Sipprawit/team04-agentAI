@@ -73,8 +73,10 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
   const processSelectedFile = (selectedFile) => {
     if (!selectedFile) return;
 
-    if (!selectedFile.name.toLowerCase().endsWith('.csv')) {
-      setMessage({ type: 'error', text: 'ระบบรองรับเฉพาะไฟล์นามสกุล .csv เท่านั้น' });
+    const ALLOWED_EXTS = ['.csv', '.tsv', '.txt', '.xlsx', '.xls'];
+    const isAllowed = ALLOWED_EXTS.some((ext) => selectedFile.name.toLowerCase().endsWith(ext));
+    if (!isAllowed) {
+      setMessage({ type: 'error', text: 'ระบบรองรับเฉพาะไฟล์นามสกุล .csv, .tsv, .txt, .xlsx, .xls เท่านั้น' });
       return;
     }
 
@@ -86,7 +88,7 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
     setMessage(null);
     setPiiWarnings([]);
     setFile(selectedFile);
-    const baseName = selectedFile.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    const baseName = selectedFile.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_\u0E00-\u0E7F]/g, '_').toLowerCase();
     if (!tableName) {
       setTableName(baseName);
     }
@@ -121,7 +123,7 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
   const handleUpload = async (e) => {
     e.preventDefault();
     if (!file || !tableName.trim()) {
-      setMessage({ type: 'error', text: 'กรุณาเลือกไฟล์ CSV และระบุชื่อตารางในฐานข้อมูล' });
+      setMessage({ type: 'error', text: 'กรุณาเลือกไฟล์ข้อมูล และระบุชื่อตารางในฐานข้อมูล' });
       return;
     }
 
@@ -261,7 +263,7 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
             onClick={() => setActiveTab('upload')}
           >
             <UploadCloud size={14} />
-            <span>นำเข้าไฟล์ CSV ใหม่</span>
+            <span>นำเข้าไฟล์ข้อมูลใหม่</span>
           </button>
           <button
             type="button"
@@ -274,12 +276,12 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
           </button>
         </div>
 
-        {/* TAB 1: Upload CSV Form */}
+        {/* TAB 1: Upload Form */}
         {activeTab === 'upload' && (
           <form onSubmit={handleUpload} className="upload-form">
             <div className="form-group">
               <label className="form-label">
-                <span>ไฟล์ข้อมูล CSV</span>
+                <span>ไฟล์ข้อมูล (CSV, Excel .xlsx/.xls, TSV, TXT)</span>
                 <span className="form-label-hint">(รองรับ UTF-8 / Windows CP-874 / TIS-620 ขนาดสูงสุด 10 MB)</span>
               </label>
               <div
@@ -291,7 +293,7 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
                 <input
                   type="file"
                   id="csvFileInput"
-                  accept=".csv"
+                  accept=".csv,.tsv,.txt,.xlsx,.xls"
                   onChange={handleFileChange}
                   disabled={isUploading}
                   className="file-native-input"
@@ -299,7 +301,7 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
                 <label htmlFor="csvFileInput" className="file-dropzone-label">
                   <FileSpreadsheet size={24} className={isDragOver ? 'text-blue-600' : 'text-blue-500'} />
                   <span className="dropzone-text">
-                    {file ? file.name : isDragOver ? 'ปล่อยไฟล์ CSV เพื่ออัปโหลด' : 'ลากไฟล์ CSV มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์'}
+                    {file ? file.name : isDragOver ? 'ปล่อยไฟล์เพื่ออัปโหลด' : 'ลากไฟล์ CSV, Excel (.xlsx) หรือ TSV มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์'}
                   </span>
                   {file && (
                     <span className="dropzone-subtext">
