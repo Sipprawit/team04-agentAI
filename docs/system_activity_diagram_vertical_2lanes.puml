@@ -1,0 +1,141 @@
+@startuml system_activity_diagram_vertical_2lanes
+title แผนภาพกิจกรรมการทำงานของระบบ (UML Activity Diagram 2 Swimlanes: แนวตั้ง)\nโครงงานระบบผู้ช่วยสืบค้นและวิเคราะห์ข้อมูลอัจฉริยะ (Text-to-SQL AI Agent System - Team 04)
+
+skinparam monochrome false
+skinparam defaultTextAlignment center
+skinparam roundcorner 16
+skinparam shadowing false
+skinparam defaultFontName "TH Sarabun New", "Tahoma", "Helvetica", sans-serif
+
+skinparam activity {
+  BackgroundColor #FFF2CC
+  BorderColor #B85450
+  BorderThickness 1.5
+  FontSize 11
+  FontColor #000000
+}
+skinparam diamond {
+  BackgroundColor #FFF2CC
+  BorderColor #B85450
+  BorderThickness 1.5
+  FontSize 11
+  FontColor #000000
+}
+skinparam arrow {
+  Color #B85450
+  FontColor #B85450
+  FontSize 10
+}
+skinparam swimlane {
+  BorderColor #000000
+  BorderThickness 1.5
+  TitleBackgroundColor #FFFFFF
+  TitleFontColor #000000
+  TitleFontSize 13
+}
+
+|User| ผู้ใช้งาน (User)
+|System| ระบบ (System)
+
+' ========================================================
+' กิจกรรมที่ 1: การนำเข้าไฟล์และตรวจสอบความปลอดภัยข้อมูล
+' ========================================================
+|User|
+start
+:เปิดหน้าต่างนำเข้าข้อมูล\nและเลือกไฟล์ (.csv, .xlsx, .xls, .tsv, .txt);
+
+|System|
+:ตรวจสอบขนาดไฟล์ (<= 20MB)\nและนามสกุลไฟล์;
+if (ไฟล์ถูกต้องหรือไม่?) then ([no])
+    :แจ้งเตือนข้อผิดพลาดบนหน้าจอ\n(ขนาดไฟล์เกิน หรือชนิดไฟล์ไม่รองรับ);
+    kill
+else ([yes])
+    :ส่งไฟล์ผ่าน REST API\nPOST /upload-csv;
+    :ตรวจสอบ Encoding อัตโนมัติ\n(UTF-8, TIS-620, Windows-874);
+    :ทำ Type Inference ตรวจจับชนิดข้อมูล\n(Integer, Float, DateTime, Text);
+    :ตรวจหา PII (บัตร ปชช., เบอร์โทร, อีเมล)\nและ Sanitize ตัดอักขระพิเศษชื่อคอลัมน์;
+    :สร้างตารางใหม่ หรือ Overwrite ตารางเดิม\nและบันทึกข้อมูลลง SQLite Sandbox;
+    :แสดงผลลัพธ์นำเข้าสำเร็จ, พรีวิว 10 แถวแรก\nและตั้งชื่อห้องแชท "ชุดข้อมูล: <ชื่อตาราง>";
+endif
+
+' ========================================================
+' กิจกรรมที่ 2: การแปลงคำถามภาษาธรรมชาติเป็น SQL
+' ========================================================
+|User|
+:ผู้ใช้พิมพ์คำถามภาษาไทย\nเช่น "แสดงยอดขาย 5 อันดับแรกแยกตามภาค";
+
+|System|
+:Frontend ตรวจสอบคำถามไม่เป็นค่าว่าง\nแสดง Loading และส่ง POST /query (Context 5);
+if (Rate Limit\nเกิน 120 req/m?) then ([yes])
+    :ส่ง HTTP 429 Too Many Requests\nแจ้งผู้ใช้รอสักครู่ก่อนส่งใหม่;
+    kill
+else ([no])
+    :Schema Inspector ดึง Schema คอลัมน์,\nData Types และข้อมูลตัวอย่าง 3 แถว;
+    :Prompt Builder ผสาน Schema + คำถาม\n+ กฎความปลอดภัย + ตัวอย่าง Few-shot;
+    repeat
+        :ส่ง Prompt ไปยัง LLaMA 3.3 70B (Groq)\nเพื่อสังเคราะห์คำสั่ง SQL;
+        if (Security AST\nอนุญาตเฉพาะ SELECT?) then ([no])
+            :บล็อกคำสั่งอันตราย (DROP/DELETE ฯลฯ)\nแจ้งเตือนความปลอดภัย;
+            kill
+        else ([yes])
+            :นำ SQL รันใน SQLite Sandbox\n(WAL Mode, Read-Only, Timeout 5s);
+            if (มีข้อผิดพลาดหรือไม่?\n(Syntax ผิด / รันไม่ผ่าน)) then ([yes])
+                if (รอบ Retry < 2 ครั้ง?) then ([yes])
+                    :Self-Correction: นำ Error + SQL เดิม + Schema\nป้อนกลับให้ AI สังเคราะห์ใหม่;
+                else ([no])
+                    :ส่งข้อความอธิบายความผิดพลาด\nอย่างสุภาพให้ผู้ใช้;
+                    kill
+                endif
+            else ([no])
+                break
+            endif
+        endif
+    repeat while (เข้าสู่ลูป Self-Correction)
+    :รัน SQL สำเร็จ: ดึงชุดข้อมูลผลลัพธ์ (Rows)\nส่งต่อไปยังระบบวิเคราะห์สถิติ;
+endif
+
+' ========================================================
+' กิจกรรมที่ 3: การวิเคราะห์ข้อมูลสถิติและการเลือกกราฟ
+' ========================================================
+if (จำนวนแถวผลลัพธ์\n> 0 หรือไม่?) then ([no])
+    :สรุปแจ้งว่าไม่พบข้อมูลที่ตรงกับเงื่อนไข\n(0 แถว) แจ้งเตือนผู้ใช้;
+    kill
+else ([yes])
+    :EDA Analyzer: แยกแยะคอลัมน์ Metrics (ตัวเลข)\nและคอลัมน์ Dimensions (หมวดหมู่/วันที่);
+    :Smart Truncation: หากผลลัพธ์ > 20 รายการ\nรวมกลุ่ม/ตัด 20 แถวแรก (is_truncated=true);
+    :Chart Recommender: เลือกประเภทกราฟ\n(Bar, Line, Area, Pie หรือ Summary Card);
+    :Statistical Summarizer: คำนวณสถิติเชิงปฏิบัติ\n(Total, Average, Max, Min, Count);
+    :แสดงคำตอบ AI, คำสั่ง SQL, แผนภูมิ Interactive,\nตารางข้อมูล, ปุ่ม CSV, ส่งออก PNG และปักหมุด;
+endif
+
+|User|
+:ผู้ใช้ดูผลวิเคราะห์, สลับประเภทกราฟ,\nกดส่งออก PNG 2x หรือดาวน์โหลด CSV;
+
+' ========================================================
+' กิจกรรมที่ 4: การจัดการประวัติการสนทนาและปักหมุด
+' ========================================================
+split
+    -[hidden]->
+    |User|
+    :กรณี A: พิมพ์ถามคำถามแรก\nในห้องสนทนาใหม่;
+    |System|
+    :Frontend generateSessionTitle() ตัดคำสร้อย\nยิง PUT /sessions/{id} บันทึกชื่อลง SQLite;
+split again
+    -[hidden]->
+    |User|
+    :กรณี B: กดปุ่ม 📌 ปักหมุด\nบนการ์ดผลลัพธ์การวิเคราะห์;
+    |System|
+    :ส่งข้อมูลไป POST /pinned-dashboard\nบันทึกลงตาราง pinned_items ใน SQLite;
+split again
+    -[hidden]->
+    |User|
+    :กรณี C: สลับไปยังแท็บ\n"แดชบอร์ดรวม" (Dynamic Dashboard);
+    |System|
+    :GET /pinned-dashboard ดึงการ์ดทั้งหมด\nจัดเรียง Grid, รองรับปลดหมุด และพิมพ์ PDF;
+end split
+
+|User|
+:ผู้ใช้เข้าถึงข้อมูลสถิติ กราฟสรุปผล\nและรายงานแดชบอร์ดครบถ้วนสมบูรณ์;
+stop
+
+@enduml
