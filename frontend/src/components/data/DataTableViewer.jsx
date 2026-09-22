@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
-import { Download, Table as TableIcon, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
+import { Download, Table as TableIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function DataTableViewer({
   data,
   title = "ตารางผลลัพธ์ข้อมูล",
-  isMaximized = false,
-  onToggleMaximize
 }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -53,11 +51,13 @@ export default function DataTableViewer({
   };
 
   return (
-    <div className={`data-table-container ${isMaximized ? 'is-maximized' : ''}`}>
+    <div className="data-table-container">
       <div className="data-table-header">
         <div className="table-title-group">
-          <TableIcon size={18} className="text-blue-600" />
-          <span className="table-title">{title}</span>
+          <div className="table-title-main">
+            <TableIcon size={18} className="table-title-icon text-blue-600" />
+            <span className="table-title">{title}</span>
+          </div>
           <span className="table-total-count-badge">{data.length.toLocaleString()} แถว</span>
         </div>
 
@@ -83,19 +83,6 @@ export default function DataTableViewer({
             <Download size={14} />
             <span>ส่งออก CSV</span>
           </button>
-
-          {/* Fullscreen Maximize Toggle Button */}
-          {onToggleMaximize && (
-            <button
-              type="button"
-              onClick={onToggleMaximize}
-              className="table-maximize-btn"
-              title={isMaximized ? "ย่อกลับขนาดเดิม (Esc)" : "ขยายตารางเต็มหน้าจอ (Full Screen)"}
-            >
-              {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-              <span>{isMaximized ? "ย่อกลับ" : "เต็มจอ"}</span>
-            </button>
-          )}
         </div>
       </div>
 

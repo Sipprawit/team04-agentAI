@@ -208,8 +208,6 @@ export default function AnalyticsPanel({
             <DataTableViewer
               data={activeMessage?.rawData || []}
               title={activeMessage?.isUploadNotice ? `ตารางข้อมูลชุด: "${activeMessage?.uploadData?.table_name || 'ชุดข้อมูล'}"` : `ผลการสืบค้น: "${userQuestion}"`}
-              isMaximized={isMaximized}
-              onToggleMaximize={onToggleMaximize}
             />
           </div>
         )}
