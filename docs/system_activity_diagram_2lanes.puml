@@ -1,0 +1,121 @@
+@startuml system_activity_diagram_2lanes
+title แผนภาพกิจกรรมการทำงานของระบบแบบครบวงจร (End-to-End UML Activity Diagram)\nกิจกรรมที่ 1 - 4 ต่อเนื่องกัน (ซ้าย: 👤 ผู้ใช้งาน | ขวา: ⚙️ ระบบ)
+
+skinparam monochrome false
+skinparam defaultTextAlignment center
+skinparam roundcorner 10
+skinparam shadowing true
+skinparam swimlaneWidth same
+
+skinparam activity {
+  BackgroundColor #FFFFFF
+  BorderColor #2563EB
+  FontSize 11
+}
+skinparam diamond {
+  BackgroundColor #FEF3C7
+  BorderColor #D97706
+  FontSize 10
+}
+
+|#F8FAFC|User| 👤 ผู้ใช้งาน (User)
+|#F0FDF4|System| ⚙️ ฝั่งระบบ (System: Frontend / Backend / AI Agent / SQLite Sandbox)
+
+|User|
+start
+:1. ผู้ใช้กดปุ่มนำเข้าข้อมูล และเลือกไฟล์จากเครื่อง\n(.csv, .xlsx, .xls, .tsv, .txt);
+
+|System|
+:2. [Frontend] ตรวจสอบขนาดไฟล์ (<= 20MB) และนามสกุลไฟล์;
+if (ขนาดและนามสกุลไฟล์ถูกต้อง?) then (ไม่ถูกต้อง)
+    #FFCDD2:แจ้งเตือนข้อผิดพลาดบนหน้าจอ\n(ขนาดเกิน / นามสกุลไม่รองรับ);
+    stop
+else (ถูกต้อง)
+    :ส่งไฟล์ผ่าน REST API POST /upload-csv;
+endif
+
+:3. [Backend Gateway] ตรวจสอบ Encoding อัตโนมัติ\n(UTF-8, TIS-620, Windows-874);
+:4. [Backend Gateway] ทำ Type Inference ตรวจจับชนิดข้อมูลแต่ละคอลัมน์\n(Integer, Float, DateTime, Text);
+:5-6. [Data Security Layer] ตรวจจับ PII (บัตร ปชช., เบอร์โทร, อีเมล, บัตรเครดิต)\nและ Sanitize จัดระเบียบชื่อคอลัมน์และตัดอักขระพิเศษ;
+:7-8. [SQLite Sandbox] สร้างตารางใหม่ หรือ Overwrite ทับตารางเดิม\nและบันทึกข้อมูลทั้งหมดลงในตาราง;
+:9. [Backend Gateway] ส่งผลลัพธ์: ชื่อตาราง, จำนวนแถว, โครงสร้างคอลัมน์, คำเตือน PII;
+:10. [Frontend & Backend State] แสดงตารางพรีวิว 10 แถวแรก\nและตั้งชื่อห้องสนทนาเป็น "ชุดข้อมูล: <ชื่อตาราง>";
+
+' ========================================================
+' กิจกรรมที่ 2: NL-to-SQL & Self-Correction Engine
+' ========================================================
+|User|
+:1. ผู้ใช้พิมพ์คำถามภาษาไทย\nเช่น "แสดงยอดขาย 5 อันดับแรกแยกตามภาค";
+
+|System|
+:2-3. [Frontend] ตรวจสอบคำถาม (ไม่เป็นค่าว่าง) แสดง Loading Animation\nส่งคำถามพร้อม Context 5 ข้อความไป POST /query;
+if (Rate Limit เกิน 120 req/m?) then (เกินโควตา)
+    #FFCDD2:ส่ง HTTP 429 Too Many Requests\nแจ้งผู้ใช้รอสักครู่;
+    stop
+else (ไม่เกิน)
+    :5. [Schema Inspector] ดึง Schema คอลัมน์, ชนิดข้อมูล, ตัวอย่าง 3 แถว;
+endif
+
+:6. [Prompt Builder] ผสาน Schema + คำถามภาษาไทย + Security Rules + Few-shot;
+repeat
+    :7. [LLM Synthesis] ส่ง Prompt ไปยัง LLaMA 3.3 70B ผ่าน Groq API;
+    if (Security AST ตรวจสอบคำสั่ง SQL ผ่าน?) then (พบคำสั่งอันตราย)
+        #FFCDD2:บล็อกคำสั่งอันตราย (DROP, DELETE ฯลฯ)\nอนุญาตเฉพาะ SELECT แจ้งเตือนผู้ใช้;
+        stop
+    else (คำสั่งปลอดภัย)
+        :9. [SQLite Sandbox] รันคำสั่ง SQL ใน Sandbox\n(WAL Mode, Read-Only, Timeout 5 วินาที);
+    endif
+repeat while (ผลการรัน SQL เกิด Error และ Retry < 2 ครั้ง?) is (เข้าสู่ลูป Self-Correction)
+-> รันสำเร็จ หรือ ล้มเหลว;
+
+if (ผลการรันสำเร็จ?) then (ล้มเหลวเกิน 2 รอบ)
+    #FFCDD2:ส่งข้อความอธิบายความผิดพลาดอย่างสุภาพให้ผู้ใช้;
+    stop
+else (สำเร็จ)
+    :ดึงชุดข้อมูลผลลัพธ์ (Result Rows) ส่งต่อไปยังระบบวิเคราะห์สถิติ;
+endif
+
+' ========================================================
+' กิจกรรมที่ 3: Analytics & Chart Recommendation
+' ========================================================
+if (พบข้อมูลผลลัพธ์ (Rows > 0)?) then (0 แถว)
+    #FFCDD2:สรุปว่าไม่พบข้อมูลที่ตรงกับเงื่อนไข แจ้งเตือนผู้ใช้;
+    stop
+else (มีข้อมูล)
+    :3. [EDA Analyzer] จำแนกคอลัมน์ตัวเลข (Metrics) และหมวดหมู่/วันที่ (Dimensions);
+    :4. [Smart Aggregation & Truncation] ถ้า > 20 รายการ\nทำการรวมกลุ่ม/ตัดแสดง 20 อันดับแรก (is_truncated = true);
+    :5. [Chart Recommender] เลือกประเภทแผนภูมิอัตโนมัติ\n(Bar / Line / Area / Pie หรือ Summary Card);
+    :6. [Statistical Summarizer] คำนวณค่าสถิติเชิงปฏิบัติ\n(Total, Average, Max, Min, Count);
+    :7-8. [Frontend Dashboard Panel] เรนเดอร์คำตอบ AI, คำอธิบายผลลัพธ์, คำสั่ง SQL,\nแท็บกราฟ Interactive, แท็บตาราง, ปุ่ม "ส่งออก PNG" 2x, และปุ่ม "📌 ปักหมุด";
+endif
+
+|User|
+:ผู้ใช้ดูผลการวิเคราะห์ โต้ตอบกับกราฟ สลับชนิดแผนภูมิ\nส่งออกภาพ PNG หรือดาวน์โหลดตารางข้อมูล .csv (UTF-8 BOM);
+
+' ========================================================
+' กิจกรรมที่ 4: Chat History & Pinned Dashboard
+' ========================================================
+split
+    -[hidden]->
+    |User|
+    :กรณี A: ผู้ใช้พิมพ์คำถามแรกในห้องใหม่;
+    |System|
+    :Frontend generateSessionTitle() ตัดคำสร้อย\nยิง PUT /sessions/{id} บันทึกชื่อลง SQLite DB;
+split again
+    -[hidden]->
+    |User|
+    :กรณี B: ผู้ใช้กดปุ่ม '📌 ปักหมุด' บนการ์ด;
+    |System|
+    :ส่งข้อมูลกราฟ+สถิติ POST /pinned-dashboard\nบันทึกลงตาราง pinned_items ใน SQLite;
+split again
+    -[hidden]->
+    |User|
+    :กรณี C: ผู้ใช้สลับไปยังแท็บ 'แดชบอร์ดรวม';
+    |System|
+    :GET /pinned-dashboard ดึงรายการทั้งหมด\nจัดเรียง Dynamic Cards รองรับ Unpin และพิมพ์ PDF;
+end split
+
+|User|
+:ผู้ใช้เข้าถึงข้อมูลการวิเคราะห์และรายงานแดชบอร์ดได้อย่างครบถ้วนสมบูรณ์;
+stop
+@enduml
