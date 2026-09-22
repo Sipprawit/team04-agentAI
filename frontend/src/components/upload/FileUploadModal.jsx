@@ -215,7 +215,7 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
     if (!previewCache[targetTableName]) {
       setIsLoadingPreview(true);
       try {
-        const res = await fetchTablePreview(targetTableName, 10);
+        const res = await fetchTablePreview(targetTableName, 200);
         setPreviewCache((prev) => ({ ...prev, [targetTableName]: res }));
       } catch (err) {
         console.error('Failed to load table preview', err);
@@ -528,7 +528,7 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
                           <div className="dataset-preview-header">
                             <div className="preview-header-title">
                               <TableIcon size={14} className="text-blue-600" />
-                              <span>ตารางตัวอย่างข้อมูล (10 แถวแรก)</span>
+                              <span>ตารางข้อมูล ({currentPreview?.preview_count || 0} จากทั้งหมด {ds.row_count.toLocaleString()} แถว)</span>
                             </div>
                             <span className="preview-header-meta">
                               แสดง {currentPreview?.preview_count || 0} จากทั้งหมด {ds.row_count.toLocaleString()} แถว

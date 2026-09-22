@@ -104,28 +104,31 @@ export default function ChartRenderer({ visualization }) {
     try {
       setIsExporting(true);
       const bbox = svgElement.getBoundingClientRect();
-      const width = bbox.width || svgElement.clientWidth || 650;
-      const height = bbox.height || svgElement.clientHeight || 290;
+      const width = Math.round(bbox.width || svgElement.clientWidth || 650);
+      const height = Math.round(bbox.height || svgElement.clientHeight || 280);
+
+      // ดึงรายการ Legend (หากมี เช่น ใน Pie Chart) เพื่อนำไปวาดต่อท้ายในรูปภาพ PNG อย่างสมบูรณ์
+      const legendWrapper = chartContainerRef.current.querySelector('.recharts-legend-wrapper');
+      const legendItems = legendWrapper ? Array.from(legendWrapper.querySelectorAll('.recharts-legend-item')) : [];
 
       // โคลน SVG เพื่อเซ็ตแอตทริบิวต์และสไตล์โดยไม่กระทบ DOM ปัจจุบัน
       const clone = svgElement.cloneNode(true);
       clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
       clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
-      clone.setAttribute('width', width);
-      clone.setAttribute('height', height);
-      if (!clone.getAttribute('viewBox')) {
-        clone.setAttribute('viewBox', `0 0 ${width} ${height}`);
-      }
+      clone.setAttribute('width', String(width));
+      clone.setAttribute('height', String(height));
+      clone.setAttribute('viewBox', `0 0 ${width} ${height}`);
 
-      // ฝัง Font และ Fill สีสำหรับ Text ให้เรนเดอร์ภาษาไทยและตัวเลขได้คมชัด
-      const origTexts = svgElement.querySelectorAll('text');
-      const cloneTexts = clone.querySelectorAll('text');
+      // ฝัง Font และ Fill สีสำหรับ Text และ Tspan ให้เรนเดอร์ภาษาไทยและตัวเลขได้คมชัด
+      const origTexts = svgElement.querySelectorAll('text, tspan');
+      const cloneTexts = clone.querySelectorAll('text, tspan');
       origTexts.forEach((orig, idx) => {
         if (cloneTexts[idx]) {
           const comp = window.getComputedStyle(orig);
-          cloneTexts[idx].style.fontFamily = comp.fontFamily || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-          cloneTexts[idx].style.fontSize = comp.fontSize || '11px';
-          cloneTexts[idx].style.fill = comp.fill || '#64748b';
+          cloneTexts[idx].setAttribute('font-family', comp.fontFamily || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif');
+          cloneTexts[idx].setAttribute('font-size', comp.fontSize || '11px');
+          cloneTexts[idx].setAttribute('fill', comp.fill || '#475569');
+          cloneTexts[idx].setAttribute('font-weight', comp.fontWeight || 'normal');
         }
       });
 
@@ -138,8 +141,11 @@ export default function ChartRenderer({ visualization }) {
       image.onload = () => {
         const canvas = document.createElement('canvas');
         const scale = 2; // Retina 2x คมชัดสูงสำหรับทำสไลด์และรายงาน
+        const legendHeight = legendItems.length > 0 ? 50 : 0;
+        const totalHeight = height + legendHeight;
+
         canvas.width = width * scale;
-        canvas.height = height * scale;
+        canvas.height = totalHeight * scale;
 
         const ctx = canvas.getContext('2d');
         // เติมพื้นหลังสีขาวป้องกันปัญหาพื้นหลังโปร่งใส
@@ -148,6 +154,42 @@ export default function ChartRenderer({ visualization }) {
 
         ctx.scale(scale, scale);
         ctx.drawImage(image, 0, 0, width, height);
+
+        // วาดแถบคำอธิบาย (Legend) ที่ด้านล่างของรูปภาพกรณีเป็น Pie Chart หรือกราฟที่มี Legend
+        if (legendItems.length > 0) {
+          ctx.font = '500 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+          ctx.textBaseline = 'middle';
+
+          let itemWidths = [];
+          let totalItemsWidth = 0;
+          legendItems.forEach((item, idx) => {
+            const textNode = item.querySelector('.recharts-legend-item-text');
+            const text = textNode ? textNode.textContent : (data[idx]?.name || `หมวด ${idx + 1}`);
+            const textWidth = ctx.measureText(text).width;
+            const w = 14 + textWidth + 16;
+            itemWidths.push({ text, textWidth, totalW: w });
+            totalItemsWidth += w;
+          });
+
+          let startX = Math.max(16, (width - totalItemsWidth) / 2);
+          const legendY = height + 24;
+
+          itemWidths.forEach((item, idx) => {
+            const color = COLORS[idx % COLORS.length];
+
+            // วาดจุดสีประจำหมวดหมู่
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(startX + 5, legendY, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // วาดข้อความชื่อหมวดหมู่
+            ctx.fillStyle = '#334155';
+            ctx.fillText(item.text, startX + 14, legendY);
+
+            startX += item.totalW;
+          });
+        }
 
         URL.revokeObjectURL(blobURL);
 
@@ -388,13 +430,10 @@ export default function ChartRenderer({ visualization }) {
                 dataKey="value"
                 nameKey="name"
                 cx="50%"
-                cy="48%"
-                outerRadius={85}
-                label={({ name, value, percent }) => {
-                  const shortName = name.length > 14 ? name.slice(0, 14) + '...' : name;
-                  const fmtVal = typeof value === 'number' ? value.toLocaleString() : value;
-                  return `${shortName} (${(percent * 100).toFixed(1)}%, ${fmtVal})`;
-                }}
+                cy="45%"
+                outerRadius={75}
+                label={({ percent }) => (percent >= 0.03 ? `${(percent * 100).toFixed(1)}%` : '')}
+                labelLine={true}
               >
                 {pieData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />

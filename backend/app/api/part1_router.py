@@ -41,12 +41,12 @@ async def upload_file(file: UploadFile = File(...), table_name: str = Form(...))
         if result["status"] == "error":
             raise HTTPException(status_code=400, detail=result["message"])
 
-        # ดึง 10 แถวแรกเป็น preview_data ให้ผู้ใช้กดดูได้ทันที
+        # ดึงข้อมูลทั้งหมดของตารางเป็น preview_data ให้ผู้ใช้เปิดดูตารางจริงได้ทันทีในหน้าเดียว
         clean_name = result["table_name"]
         preview_rows = []
         try:
             with engine.connect() as conn:
-                res = conn.execute(text(f'SELECT * FROM "{clean_name}" LIMIT 10;'))
+                res = conn.execute(text(f'SELECT * FROM "{clean_name}" LIMIT 2000;'))
                 preview_rows = [dict(row._mapping) for row in res]
         except Exception:
             pass
@@ -155,8 +155,8 @@ async def list_datasets(uploaded_only: bool = Query(default=False)):
 
 
 @router.get("/tables/{table_name}/preview")
-async def preview_table(table_name: str, limit: int = Query(default=10, ge=1, le=100)):
-    """ดึงตัวอย่างข้อมูล N แถวแรกของตาราง"""
+async def preview_table(table_name: str, limit: int = Query(default=200, ge=1, le=2000)):
+    """ดึงตัวอย่างข้อมูลของตาราง (รองรับสูงสุด 2,000 แถว)"""
     clean_name = sanitize_identifier(table_name)
     try:
         with engine.connect() as conn:

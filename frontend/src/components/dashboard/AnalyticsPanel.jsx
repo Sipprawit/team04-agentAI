@@ -7,6 +7,8 @@ import {
   Pin,
   Sparkles,
   PanelRightClose,
+  Maximize2,
+  Minimize2,
   X
 } from 'lucide-react';
 import ChartRenderer from '../charts/ChartRenderer';
@@ -20,6 +22,8 @@ export default function AnalyticsPanel({
   onClose,
   activeTab: controlledTab,
   onTabChange,
+  isMaximized = false,
+  onToggleMaximize,
 }) {
   const [internalTab, setInternalTab] = useState('insights'); // 'insights' | 'table' | 'pinned'
   const activeTab = controlledTab !== undefined ? controlledTab : internalTab;
@@ -91,11 +95,24 @@ export default function AnalyticsPanel({
           </button>
         </div>
 
-        {onClose && (
-          <button onClick={onClose} className="panel-close-toggle" title="ปิดแผงการแสดงผล">
-            <PanelRightClose size={16} />
-          </button>
-        )}
+        <div className="analytics-header-controls">
+          {onToggleMaximize && (
+            <button
+              type="button"
+              onClick={onToggleMaximize}
+              className="panel-maximize-toggle"
+              title={isMaximized ? "ย่อกลับขนาดเดิม (Esc)" : "ขยายเต็มหน้าจอ (Maximize)"}
+            >
+              {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            </button>
+          )}
+
+          {onClose && (
+            <button onClick={onClose} className="panel-close-toggle" title="ปิดแผงการแสดงผล">
+              <PanelRightClose size={16} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tab Content */}
@@ -190,7 +207,9 @@ export default function AnalyticsPanel({
           <div className="table-view-container">
             <DataTableViewer
               data={activeMessage?.rawData || []}
-              title={`ผลการสืบค้น: "${userQuestion}"`}
+              title={activeMessage?.isUploadNotice ? `ตารางข้อมูลชุด: "${activeMessage?.uploadData?.table_name || 'ชุดข้อมูล'}"` : `ผลการสืบค้น: "${userQuestion}"`}
+              isMaximized={isMaximized}
+              onToggleMaximize={onToggleMaximize}
             />
           </div>
         )}

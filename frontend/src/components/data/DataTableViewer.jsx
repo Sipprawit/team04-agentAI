@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
-import { Download, Table as TableIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Download, Table as TableIcon, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
 
-export default function DataTableViewer({ data, title = "ตารางผลลัพธ์ข้อมูล" }) {
+export default function DataTableViewer({
+  data,
+  title = "ตารางผลลัพธ์ข้อมูล",
+  isMaximized = false,
+  onToggleMaximize
+}) {
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 8;
+  const [pageSize, setPageSize] = useState(25);
 
   if (!data || data.length === 0) {
     return (
@@ -15,9 +20,16 @@ export default function DataTableViewer({ data, title = "ตารางผล�
   }
 
   const columns = Object.keys(data[0]);
-  const totalPages = Math.ceil(data.length / pageSize);
-  const startIndex = (currentPage - 1) * pageSize;
-  const currentRows = data.slice(startIndex, startIndex + pageSize);
+  const effectivePageSize = pageSize === 0 ? data.length : pageSize;
+  const totalPages = Math.ceil(data.length / effectivePageSize);
+  const startIndex = (currentPage - 1) * effectivePageSize;
+  const currentRows = data.slice(startIndex, startIndex + effectivePageSize);
+
+  const handlePageSizeChange = (e) => {
+    const val = Number(e.target.value);
+    setPageSize(val);
+    setCurrentPage(1);
+  };
 
   const handleExportCsv = () => {
     if (!data || data.length === 0) return;
@@ -41,22 +53,57 @@ export default function DataTableViewer({ data, title = "ตารางผล�
   };
 
   return (
-    <div className="data-table-container">
+    <div className={`data-table-container ${isMaximized ? 'is-maximized' : ''}`}>
       <div className="data-table-header">
         <div className="table-title-group">
           <TableIcon size={18} className="text-blue-600" />
-          <span className="table-title">{title} ({data.length} แถว)</span>
+          <span className="table-title">{title}</span>
+          <span className="table-total-count-badge">{data.length.toLocaleString()} แถว</span>
         </div>
-        <button onClick={handleExportCsv} className="table-export-btn" title="ดาวน์โหลดเป็นไฟล์ CSV">
-          <Download size={14} />
-          <span>ส่งออก CSV</span>
-        </button>
+
+        <div className="table-header-actions-group">
+          {/* Rows per page selector */}
+          <div className="table-page-size-selector">
+            <span className="page-size-label">แสดง:</span>
+            <select
+              value={pageSize}
+              onChange={handlePageSizeChange}
+              className="page-size-select"
+            >
+              <option value={10}>10 แถว</option>
+              <option value={25}>25 แถว</option>
+              <option value={50}>50 แถว</option>
+              <option value={100}>100 แถว</option>
+              <option value={0}>ทั้งหมด ({data.length})</option>
+            </select>
+          </div>
+
+          {/* Export CSV Button */}
+          <button onClick={handleExportCsv} className="table-export-btn" title="ดาวน์โหลดเป็นไฟล์ CSV">
+            <Download size={14} />
+            <span>ส่งออก CSV</span>
+          </button>
+
+          {/* Fullscreen Maximize Toggle Button */}
+          {onToggleMaximize && (
+            <button
+              type="button"
+              onClick={onToggleMaximize}
+              className="table-maximize-btn"
+              title={isMaximized ? "ย่อกลับขนาดเดิม (Esc)" : "ขยายตารางเต็มหน้าจอ (Full Screen)"}
+            >
+              {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              <span>{isMaximized ? "ย่อกลับ" : "เต็มจอ"}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="table-scroll-wrapper">
         <table className="custom-data-table">
           <thead>
             <tr>
+              <th className="table-th-idx">#</th>
               {columns.map((col, idx) => (
                 <th key={idx}>{col}</th>
               ))}
@@ -65,6 +112,7 @@ export default function DataTableViewer({ data, title = "ตารางผล�
           <tbody>
             {currentRows.map((row, rIdx) => (
               <tr key={rIdx}>
+                <td className="table-td-idx">{startIndex + rIdx + 1}</td>
                 {columns.map((col, cIdx) => (
                   <td key={cIdx}>
                     {row[col] !== null && row[col] !== undefined
@@ -83,20 +131,23 @@ export default function DataTableViewer({ data, title = "ตารางผล�
       {totalPages > 1 && (
         <div className="table-pagination">
           <span className="pagination-info">
-            แสดงหน้า {currentPage} จากทั้งหมด {totalPages} หน้า
+            แสดงแถวที่ {startIndex + 1} - {Math.min(startIndex + effectivePageSize, data.length)} จากทั้งหมด {data.length.toLocaleString()} แถว (หน้า {currentPage}/{totalPages})
           </span>
           <div className="pagination-buttons">
             <button
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
               className="page-btn"
+              title="หน้าก่อนหน้า"
             >
               <ChevronLeft size={16} />
             </button>
+            <span className="current-page-display">{currentPage} / {totalPages}</span>
             <button
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
               className="page-btn"
+              title="หน้าถัดไป"
             >
               <ChevronRight size={16} />
             </button>

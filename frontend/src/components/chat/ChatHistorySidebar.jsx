@@ -9,7 +9,7 @@ export default function ChatHistorySidebar({
   onSelectSession,
   onNewChat,
   onDeleteSession,
-  user
+  _user
 }) {
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, sessionId: null });
 
@@ -64,7 +64,6 @@ export default function ChatHistorySidebar({
           </div>
           <div className="brand-text">
             <h2>DataAgent AI</h2>
-            <span className="brand-badge">Team 04</span>
           </div>
         </div>
         <button onClick={onToggle} className="sidebar-close-toggle" title="ย่อแถบประวัติ">
@@ -115,16 +114,6 @@ export default function ChatHistorySidebar({
         </div>
       </div>
 
-      {/* User Footer Profile */}
-      <div className="sidebar-footer">
-        <div className="user-avatar">
-          {user?.name ? user.name.slice(0, 2).toUpperCase() : '04'}
-        </div>
-        <div className="user-info">
-          <span className="user-name">{user ? user.name : "ผู้ใช้งาน"}</span>
-          <span className="user-status">● ระบบพร้อมใช้งาน</span>
-        </div>
-      </div>
 
       {/* Floating Right-Click Context Menu */}
       {contextMenu.visible && (

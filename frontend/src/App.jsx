@@ -140,6 +140,7 @@ export default function App() {
   // 3. UI Panes Toggle & Resizing States
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
+  const [isRightPanelMaximized, setIsRightPanelMaximized] = useState(false);
   const [rightPanelWidth, setRightPanelWidth] = useState(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_PANEL_WIDTH_KEY);
@@ -210,6 +211,17 @@ export default function App() {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isDraggingResizer, rightPanelWidth]);
+
+  // ปิดโหมดขยายเต็มหน้าจอเมื่อกดปุ่ม Escape
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isRightPanelMaximized) {
+        setIsRightPanelMaximized(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isRightPanelMaximized]);
 
   // ============================================
   // Auto-Sync with Backend SQLite (Part 4)
@@ -706,7 +718,7 @@ export default function App() {
       uploadData: res,
       userQuery: `นำเข้าไฟล์ชุดข้อมูล: ${res.table_name}`,
       text: messageText,
-      sql: `SELECT * FROM "${res.table_name}" LIMIT 10;`,
+      sql: `SELECT * FROM "${res.table_name}";`,
       visualization: null,
       rawData: res.preview_data || [],
       followUpQuestions: [
@@ -944,7 +956,7 @@ export default function App() {
                             }}
                           >
                             <TableIcon size={14} />
-                            <span>ดูตัวอย่างข้อมูลตาราง (10 แถวแรก)</span>
+                            <span>ดูตารางข้อมูลทั้งหมด ({msg.uploadData.row_count ? msg.uploadData.row_count.toLocaleString() : 0} รายการ)</span>
                             <ArrowRight size={13} />
                           </button>
                         </div>
@@ -1139,7 +1151,7 @@ export default function App() {
           </section>
 
           {/* DRAGGABLE RESIZER DIVIDER */}
-          {isRightPanelOpen && (
+          {isRightPanelOpen && !isRightPanelMaximized && (
             <div
               className={`pane-resizer ${isDraggingResizer ? 'active' : ''}`}
               onMouseDown={handleResizerMouseDown}
@@ -1149,20 +1161,25 @@ export default function App() {
             </div>
           )}
 
-          {/* RIGHT PANE: Live Analytics Dashboard & Data Workspace (Resizable) */}
+          {/* RIGHT PANE: Live Analytics Dashboard & Data Workspace (Resizable & Maximizable) */}
           {isRightPanelOpen && (
             <section
-              className="analytics-pane"
-              style={{ width: `${rightPanelWidth}px`, flexShrink: 0 }}
+              className={`analytics-pane ${isRightPanelMaximized ? 'is-maximized' : ''}`}
+              style={isRightPanelMaximized ? {} : { width: `${rightPanelWidth}px`, flexShrink: 0 }}
             >
               <AnalyticsPanel
                 activeMessage={activeMessage}
                 pinnedItems={pinnedItems}
                 onPinItem={handlePinItem}
                 onUnpinItem={handleUnpinItem}
-                onClose={() => setIsRightPanelOpen(false)}
+                onClose={() => {
+                  setIsRightPanelOpen(false);
+                  setIsRightPanelMaximized(false);
+                }}
                 activeTab={analyticsTab}
                 onTabChange={setAnalyticsTab}
+                isMaximized={isRightPanelMaximized}
+                onToggleMaximize={() => setIsRightPanelMaximized(prev => !prev)}
               />
             </section>
           )}
