@@ -1,0 +1,184 @@
+@startuml system_activity_diagram_end_to_end
+title แผนภาพกิจกรรมการทำงานของระบบแบบครบวงจร (End-to-End System Activity Diagram)\nโครงงานระบบผู้ช่วยสืบค้นและวิเคราะห์ข้อมูลอัจฉริยะ (Text-to-SQL AI Agent System - Team 04)
+
+skinparam monochrome false
+skinparam defaultTextAlignment center
+skinparam roundcorner 12
+skinparam shadowing true
+skinparam swimlaneWidth same
+
+skinparam activity {
+  BackgroundColor #FFFFFF
+  BorderColor #34495E
+  FontSize 11
+}
+skinparam diamond {
+  BackgroundColor #FFF2CC
+  BorderColor #D6B656
+  FontSize 10
+}
+skinparam note {
+  BackgroundColor #F2F4F4
+  BorderColor #BDC3C7
+  FontSize 10
+}
+
+|#EBF5FB|User| 👤 ผู้ใช้งาน (User)
+|#E8F8F5|Frontend| 💻 ส่วนหน้าบ้าน (Frontend: React)
+|#FEF9E7|Backend| ⚙️ ระบบหลังบ้าน & AI (FastAPI / Agent)
+|#F5EEF8|Database| 🗄️ ฐานข้อมูล (SQLite Sandbox)
+
+' ========================================================
+' กิจกรรมที่ 1: การนำเข้าไฟล์และตรวจสอบความปลอดภัยข้อมูล
+' ========================================================
+|User|
+start
+:1. กดปุ่มนำเข้าและเลือกไฟล์จากเครื่อง\n(.csv, .xlsx, .xls, .tsv, .txt);
+
+|Frontend|
+:2. ตรวจสอบขนาดไฟล์ (<= 20MB)\nและนามสกุลไฟล์ที่กำหนด;
+if (ไฟล์ถูกต้องตามเกณฑ์?) then (ไม่ถูกต้อง)
+    #FFCDD2:แจ้งเตือนข้อผิดพลาดบนหน้าจอ\n(ขนาดเกิน / นามสกุลไม่รองรับ);
+    stop
+else (ถูกต้อง)
+    :ส่งคำขอ API:\nPOST /upload-csv (Multipart);
+endif
+
+|Backend|
+:3. ตรวจจับ Encoding ของไฟล์อัตโนมัติ\n(UTF-8, TIS-620, Windows-874);
+:4. ทำ Type Inference จำแนกประเภทข้อมูล\n(Integer, Float, DateTime, Text);
+:5. ตรวจสอบ PII ด้วย Regex\n(บัตร ปชช. 13 หลัก, เบอร์โทร, อีเมล, บัตรเครดิต);
+:6. จัดระเบียบชื่อคอลัมน์ (Sanitize Column Names)\nและตัดอักขระพิเศษ;
+
+|Database|
+:7. สร้างตารางใหม่ หรือ Overwrite ทับตารางเดิม\n(DROP TABLE IF EXISTS);
+:8. บันทึกข้อมูลทั้งหมดลงในตาราง SQLite\n(เปิด WAL Mode เพื่อความปลอดภัย);
+
+|Backend|
+:9. รวบรวมและส่งผลลัพธ์กลับ:\nชื่อตาราง, จำนวนแถว, โครงสร้างคอลัมน์, คำเตือน PII;
+
+|Frontend|
+:10. แสดงข้อความนำเข้าสำเร็จ,\nเรนเดอร์พรีวิวข้อมูล 10 แถวแรก,\nและตั้งชื่อห้อง: "ชุดข้อมูล: <ชื่อตาราง>";
+
+note right
+  <b>[เชื่อมต่อกิจกรรม 1 สู่ 2]</b>
+  ชุดข้อมูลพร้อมใช้งานสำหรับการสืบค้น
+end note
+
+' ========================================================
+' กิจกรรมที่ 2: NL-to-SQL & Self-Correction Engine
+' ========================================================
+|User|
+:11. ผู้ใช้พิมพ์คำถามภาษาไทย\nเช่น "แสดงยอดขาย 5 อันดับแรกแยกตามภาค";
+
+|Frontend|
+:12. ตรวจสอบข้อความคำถาม (ไม่เป็นค่าว่าง);
+:13. แสดง Animation Loading\nและส่งคำขอ POST /query พร้อม Context 5 ข้อความล่าสุด;
+
+|Backend|
+:14. Rate Limiter Guard:\nตรวจสอบโควตา Client IP (<= 120 req/นาที);
+if (เกินโควตา Rate Limit?) then (เกิน 120 req/m)
+    #FFCDD2:ส่ง HTTP 429 Too Many Requests\nแจ้งเตือนผู้ใช้ให้รอ 1 นาที;
+    stop
+else (ไม่เกินโควตา)
+    :15. Schema Inspector:\nดึง Schema คอลัมน์, ประเภทข้อมูล, และข้อมูลตัวอย่าง 3 แถว;
+endif
+
+:16. Prompt Builder:\nผสาน Schema + คำถามภาษาไทย + กฎความปลอดภัย + ตัวอย่าง Few-shot;
+:17. LLM Synthesis:\nส่ง Prompt ไปยัง LLaMA 3.3 70B ผ่าน Groq API เพื่อสร้าง SQL;
+:18. Security AST Validation:\nตรวจสอบโครงสร้าง Abstract Syntax Tree\n(อนุญาตเฉพาะคำสั่ง SELECT เท่านั้น);
+
+if (ผ่านเกณฑ์ความปลอดภัย?) then (พบคำสั่งอันตราย)
+    #FFCDD2:บล็อกคำสั่งอันตราย (DROP/DELETE/ALTER)\nแจ้งเตือนความปลอดภัย;
+    stop
+else (เฉพาะ SELECT)
+endif
+
+|Database|
+repeat
+    :19. ประมวลผลคำสั่ง SQL ใน SQLite Sandbox\n(WAL Mode, Read-Only Connection, Timeout 5s);
+
+|Backend|
+    if (ผลการรันคำสั่ง SQL สำเร็จหรือไม่?) then (เกิด Error)
+        if (จำนวนครั้ง Retry < 2 ครั้ง?) then (Retry < 2)
+            :20. Self-Correction Engine:\nนำ Error Message + SQL เดิม + Schema\nป้อนกลับไปให้ AI วิเคราะห์และแก้ใหม่ (Retry + 1);
+        else (ครบ 2 รอบแล้ว)
+            #FFCDD2:21. ส่งข้อความอธิบายความผิดพลาดอย่างสุภาพ\nและให้คำแนะนำในการปรับคำถาม;
+            stop
+        endif
+    else (รันสำเร็จ 100%)
+        :22. ดึงชุดข้อมูลผลลัพธ์ (Result Rows);
+        break
+    endif
+repeat while (วนกลับไปรัน SQL ที่แก้ไขแล้ว)
+
+note right
+  <b>[เชื่อมต่อกิจกรรม 2 สู่ 3]</b>
+  ส่ง Result Rows เข้าสู่ระบบวิเคราะห์สถิติ
+end note
+
+' ========================================================
+' กิจกรรมที่ 3: Analytics & Chart Recommendation
+' ========================================================
+|Backend|
+:23. รับชุดข้อมูลผลลัพธ์ (Rows) จากการรัน SQL;
+if (มีข้อมูลในผลลัพธ์หรือไม่?) then (0 แถว)
+    |Frontend|
+    #FFF9C4:24. แจ้งเตือน "ไม่พบข้อมูลที่ตรงกับเงื่อนไขคำถาม";
+    stop
+else (มีข้อมูล > 0 แถว)
+    |Backend|
+    :25. EDA Analyzer:\nแยกแยะคอลัมน์ตัวเลข (Metrics)\nและคอลัมน์หมวดหมู่/วันที่ (Dimensions);
+    :26. Smart Aggregation & Truncation:\nหากผลลัพธ์ > 20 รายการ ให้รวมกลุ่มหรือตัดเหลือ Top 20\nพร้อมตั้งค่า is_truncated = true;
+    :27. Chart Recommender Heuristics:\n- หมวดหมู่ -> Bar Chart\n- แนวโน้ม/เวลา -> Line / Area Chart\n- สัดส่วน (<= 7) -> Pie Chart\n- ค่าเดี่ยว -> Summary Card;
+    :28. Statistical Summarizer:\nคำนวณสถิติใช้งานจริง (Total, Avg, Max, Min, Count);
+endif
+
+|Frontend|
+:29. เรนเดอร์คำตอบ AI พร้อมคำอธิบายภาษาไทย\nและกล่องคำสั่ง SQL (คลิกดูได้);
+:30. เรนเดอร์แท็บกราฟ (Interactive Switcher: Bar, Line, Pie, Area)\n+ ปุ่ม "ส่งออก PNG" (ความละเอียด 2x Retina พื้นหลังขาว);
+:31. เรนเดอร์แท็บตาราง (Data Table)\n+ ปุ่มดาวน์โหลดไฟล์ .csv (UTF-8 BOM ภาษาไทยสมบูรณ์);
+:32. แสดงปุ่ม "📌 ปักหมุด" บนการ์ดผลลัพธ์;
+
+note right
+  <b>[เชื่อมต่อกิจกรรม 3 สู่ 4]</b>
+  ผู้ใช้เลือกการกระทำต่อไป
+end note
+
+' ========================================================
+' กิจกรรมที่ 4: Chat History & Pinned Dashboard
+' ========================================================
+|User|
+if (ผู้ใช้งานเลือกดำเนินการใดต่อไปนี้?) then (ทางเลือก A: สร้าง/สลับห้องสนทนา)
+    :กรณี A: ถามคำถามในห้องใหม่ หรือเลือกห้องเดิม;
+    |Frontend|
+    :33A. generateSessionTitle():\nตัดคำสร้อยภาษาไทย สร้างชื่อหัวข้อสั้นกระชับ;
+    |Backend|
+    :34A. ส่ง PUT /sessions/{id} บันทึกชื่อหัวข้อลง SQLite DB;
+    |Frontend|
+    :35A. อัปเดตรายการใน Chat History Sidebar\n(แสดงเฉพาะชื่อหัวข้อ ไม่มีคำว่า 'ล่าสุด');
+elseif (ทางเลือก B: ปักหมุดการ์ดผลลัพธ์)
+    |User|
+    :กรณี B: กดปุ่ม "📌 ปักหมุด";
+    |Frontend|
+    :33B. ส่ง POST /pinned-dashboard\nพร้อมข้อมูลกราฟ สถิติ และคำสั่ง SQL;
+    |Database|
+    :34B. บันทึกข้อมูลลงตาราง pinned_items ใน SQLite;
+    |Frontend|
+    :35B. แสดง Toast แจ้งเตือน "ปักหมุดสำเร็จ";
+else (ทางเลือก C: เปิดหน้าปัดแดชบอร์ดรวม)
+    |User|
+    :กรณี C: สลับไปยังแท็บ "แดชบอร์ดรวม";
+    |Frontend|
+    :33C. ส่ง GET /pinned-dashboard ดึงรายการที่ปักหมุดทั้งหมด;
+    |Database|
+    :34C. ดึงข้อมูลจากตาราง pinned_items (เรียงตามเวลาล่าสุด);
+    |Frontend|
+    :35C. เรนเดอร์ Dynamic Dashboard Grid Cards\n(รองรับปุ่ม Unpin และปุ่มพิมพ์/ส่งออกเป็น PDF);
+endif
+
+|Frontend|
+:ระบบพร้อมรับคำสั่งถัดไปจากผู้ใช้;
+stop
+
+@enduml
