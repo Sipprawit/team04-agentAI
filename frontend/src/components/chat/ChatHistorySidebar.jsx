@@ -98,7 +98,6 @@ export default function ChatHistorySidebar({
             >
               <div className="session-item-content">
                 <span className="session-title">{sess.title}</span>
-                <span className="session-time">{sess.time || 'ล่าสุด'}</span>
               </div>
               <button
                 type="button"

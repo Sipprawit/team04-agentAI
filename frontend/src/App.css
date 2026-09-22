@@ -1537,6 +1537,44 @@ body {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
+.chart-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chart-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--slate-600);
+  background-color: var(--slate-100);
+  border: 1px solid var(--slate-200);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chart-export-btn:hover:not(:disabled) {
+  background-color: var(--slate-200);
+  color: var(--slate-900);
+  border-color: var(--slate-300);
+}
+
+.chart-export-btn.success {
+  background-color: #ecfdf5;
+  color: #059669;
+  border-color: #a7f3d0;
+}
+
+.chart-export-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .chart-render-box {
   margin-bottom: 14px;
 }

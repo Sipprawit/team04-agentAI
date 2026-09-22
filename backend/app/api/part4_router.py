@@ -50,8 +50,37 @@ def _init_part4_tables():
                 pinned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """))
+        # ทำความสะอาดชื่อ session เก่าที่เคยบันทึกเป็น markdown นำเข้าข้อมูล
+        try:
+            conn.execute(text("""
+                UPDATE chat_sessions 
+                SET title = 'ชุดข้อมูล: ' || substr(title, instr(title, '`') + 1, instr(substr(title, instr(title, '`') + 1), '`') - 1) 
+                WHERE title LIKE '**นำเข้า%`%`%';
+            """))
+            conn.execute(text("""
+                UPDATE chat_sessions 
+                SET title = REPLACE(REPLACE(title, '**', ''), '`', '') 
+                WHERE title LIKE '**%';
+            """))
+        except Exception:
+            pass
         conn.commit()
     _tables_initialized = True
+
+
+def _clean_session_title(title: str) -> str:
+    """ทำความสะอาดชื่อหัวข้อสนทนา ป้องกันข้อความ Markdown จากการอัปโหลดไฟล์ตกค้าง"""
+    if not title:
+        return "การสนทนาใหม่"
+    if title.startswith("**นำเข้าชุดข้อมูลเข้าสู่ตาราง `") or title.startswith("**นำเข้า"):
+        import re
+        m = re.search(r"`([^`]+)`", title)
+        if m:
+            return f"ชุดข้อมูล: {m.group(1)}"
+        return "ชุดข้อมูลใหม่"
+    if title.startswith("**"):
+        return title.replace("**", "").replace("`", "").strip()[:30]
+    return title
 
 
 # ============================================
@@ -68,7 +97,7 @@ def list_sessions():
         )).fetchall()
     return {
         "sessions": [
-            {"session_id": r[0], "title": r[1], "created_at": r[2], "updated_at": r[3]}
+            {"session_id": r[0], "title": _clean_session_title(r[1]), "created_at": r[2], "updated_at": r[3]}
             for r in rows
         ]
     }
@@ -149,11 +178,50 @@ def save_chat_message(session_id: str, message: Dict[str, Any] = Body(...)):
     metadata = message.get("metadata")
     metadata_json = json.dumps(metadata, ensure_ascii=False) if metadata else None
 
+    # ตั้งชื่อ Session เริ่มต้นให้สะอาด ไม่ติดข้อความ Markdown ของระบบนำเข้า
+    if metadata and isinstance(metadata, dict) and metadata.get("uploadData"):
+        upload_data = metadata.get("uploadData")
+        table_name = upload_data.get("table_name", "")
+        default_title = f"ชุดข้อมูล: {table_name}" if table_name else "ชุดข้อมูลใหม่"
+    elif content.startswith("**นำเข้า"):
+        import re
+        m = re.search(r"`([^`]+)`", content)
+        default_title = f"ชุดข้อมูล: {m.group(1)}" if m else "ชุดข้อมูลใหม่"
+    elif content:
+        clean_text = content.strip().lstrip("#* \t\n")
+        default_title = clean_text[:30] if clean_text else "การสนทนาใหม่"
+    else:
+        default_title = "การสนทนาใหม่"
+
     with engine.connect() as conn:
         # สร้าง session ถ้ายังไม่มี
         conn.execute(text(
             "INSERT OR IGNORE INTO chat_sessions (session_id, title) VALUES (:sid, :title)"
-        ), {"sid": session_id, "title": content[:50] if content else "การสนทนาใหม่"})
+        ), {"sid": session_id, "title": default_title})
+
+        # หากเป็นข้อความคำถามจาก User (role == 'user') และชื่อห้องปัจจุบันยังเป็นชื่อเริ่มต้นหรือชื่อชุดข้อมูล
+        # ให้อัปเดตชื่อห้องตามคำถามของผู้ใช้โดยอัตโนมัติ
+        if role in ("user", "human") and content.strip():
+            current_title = conn.execute(text(
+                "SELECT title FROM chat_sessions WHERE session_id = :sid"
+            ), {"sid": session_id}).scalar()
+
+            if current_title:
+                is_initial_title = (
+                    current_title.startswith("การสนทนาใหม่") or
+                    current_title.startswith("ชุดข้อมูล:") or
+                    current_title.startswith("**") or
+                    current_title in ("การวิเคราะห์ข้อมูลและสถิติ", "ชุดข้อมูลใหม่", "นำเข้าชุดข้อมูล")
+                )
+                if is_initial_title:
+                    import re
+                    user_clean = content.strip()
+                    user_clean = re.sub(r"^(ขอ|ช่วย|ลอง|กรุณา|ค้นหา|แสดง)\s*", "", user_clean, flags=re.IGNORECASE)
+                    new_title = (user_clean[:24] + "...") if len(user_clean) > 24 else (user_clean or content.strip()[:20])
+                    conn.execute(text(
+                        "UPDATE chat_sessions SET title = :title WHERE session_id = :sid"
+                    ), {"title": new_title, "sid": session_id})
+
         # บันทึกข้อความ
         conn.execute(text(
             "INSERT INTO chat_messages (session_id, role, content, metadata_json) VALUES (:sid, :role, :content, :meta)"

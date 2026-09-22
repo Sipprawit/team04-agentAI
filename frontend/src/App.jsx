@@ -93,7 +93,7 @@ export default function App() {
       const saved = localStorage.getItem(LOCAL_STORAGE_SESSIONS_KEY);
       if (saved) return JSON.parse(saved);
     } catch (_e) {}
-    return [{ id: 'session_default', title: 'การวิเคราะห์ข้อมูลและสถิติ', time: 'ล่าสุด' }];
+    return [{ id: 'session_default', title: 'การวิเคราะห์ข้อมูลและสถิติ' }];
   });
 
   const [activeSession, setActiveSession] = useState(() => {
@@ -223,8 +223,7 @@ export default function App() {
         if (backendSessions && backendSessions.length > 0) {
           const formatted = backendSessions.map(s => ({
             id: s.session_id,
-            title: s.title || 'การสนทนา',
-            time: 'ล่าสุด'
+            title: s.title || 'การสนทนา'
           }));
           setSessions(formatted);
           if (!backendSessions.some(s => s.session_id === activeSession)) {
@@ -433,12 +432,23 @@ export default function App() {
 
     // Auto-update session title based on first query
     const newTitle = generateSessionTitle(queryToSend);
+    let shouldUpdateSessionTitle = false;
     setSessions(prev => prev.map(s => {
-      if (s.id === activeSession && (s.title.startsWith('การสนทนาใหม่') || s.title === 'การวิเคราะห์ข้อมูลและสถิติ')) {
+      if (s.id === activeSession && (
+        s.title.startsWith('การสนทนาใหม่') ||
+        s.title === 'การวิเคราะห์ข้อมูลและสถิติ' ||
+        s.title.startsWith('ชุดข้อมูล:') ||
+        s.title.startsWith('**') ||
+        s.title === 'นำเข้าชุดข้อมูล'
+      )) {
+        shouldUpdateSessionTitle = true;
         return { ...s, title: newTitle };
       }
       return s;
     }));
+    if (shouldUpdateSessionTitle) {
+      updateSession(activeSession, newTitle).catch(() => {});
+    }
 
     try {
       // Send last 5 messages as context
@@ -597,8 +607,7 @@ export default function App() {
     const newTitle = `การสนทนาใหม่ ${sessions.length + 1}`;
     const newSession = {
       id: newId,
-      title: newTitle,
-      time: 'ล่าสุด'
+      title: newTitle
     };
 
     try {
@@ -711,6 +720,23 @@ export default function App() {
       ...prev,
       [activeSession]: [...(prev[activeSession] || []), uploadAiMsg]
     }));
+
+    // ตั้งชื่อห้องแชทให้ตรงกับชุดข้อมูลที่นำเข้า (หากยังเป็นห้องว่าง/การสนทนาใหม่)
+    const datasetTitle = `ชุดข้อมูล: ${res.table_name}`;
+    let shouldUpdateUploadTitle = false;
+    setSessions(prev => prev.map(s => {
+      if (s.id === activeSession && (
+        s.title.startsWith('การสนทนาใหม่') ||
+        s.title === 'การวิเคราะห์ข้อมูลและสถิติ'
+      )) {
+        shouldUpdateUploadTitle = true;
+        return { ...s, title: datasetTitle };
+      }
+      return s;
+    }));
+    if (shouldUpdateUploadTitle) {
+      updateSession(activeSession, datasetTitle).catch(() => {});
+    }
 
     // Persist to SQLite
     saveChatMessage(activeSession, {

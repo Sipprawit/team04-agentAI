@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ResponsiveContainer,
   BarChart,
@@ -16,7 +16,7 @@ import {
   CartesianGrid,
   Legend,
 } from 'recharts';
-import { BarChart3, TrendingUp, PieChart as PieIcon, Layers, Info } from 'lucide-react';
+import { BarChart3, TrendingUp, PieChart as PieIcon, Layers, Info, Camera, Check } from 'lucide-react';
 
 const COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
@@ -85,12 +85,94 @@ const CustomChartTooltip = ({ active, payload, label }) => {
 export default function ChartRenderer({ visualization }) {
   const initialType = visualization?.recommended_chart || 'bar';
   const [selectedChartType, setSelectedChartType] = useState(initialType);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportSuccess, setExportSuccess] = useState(false);
+  const chartContainerRef = useRef(null);
 
   useEffect(() => {
     if (visualization?.recommended_chart) {
       setSelectedChartType(visualization.recommended_chart);
     }
   }, [visualization]);
+
+  const handleExportPng = () => {
+    if (!chartContainerRef.current || isExporting) return;
+    // ค้นหา SVG ของ Recharts โดยตรงภายใน chartContainerRef (ไม่ปนกับไอคอนบน Toolbar)
+    const svgElement = chartContainerRef.current.querySelector('svg.recharts-surface') || chartContainerRef.current.querySelector('svg');
+    if (!svgElement) return;
+
+    try {
+      setIsExporting(true);
+      const bbox = svgElement.getBoundingClientRect();
+      const width = bbox.width || svgElement.clientWidth || 650;
+      const height = bbox.height || svgElement.clientHeight || 290;
+
+      // โคลน SVG เพื่อเซ็ตแอตทริบิวต์และสไตล์โดยไม่กระทบ DOM ปัจจุบัน
+      const clone = svgElement.cloneNode(true);
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+      clone.setAttribute('width', width);
+      clone.setAttribute('height', height);
+      if (!clone.getAttribute('viewBox')) {
+        clone.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      }
+
+      // ฝัง Font และ Fill สีสำหรับ Text ให้เรนเดอร์ภาษาไทยและตัวเลขได้คมชัด
+      const origTexts = svgElement.querySelectorAll('text');
+      const cloneTexts = clone.querySelectorAll('text');
+      origTexts.forEach((orig, idx) => {
+        if (cloneTexts[idx]) {
+          const comp = window.getComputedStyle(orig);
+          cloneTexts[idx].style.fontFamily = comp.fontFamily || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+          cloneTexts[idx].style.fontSize = comp.fontSize || '11px';
+          cloneTexts[idx].style.fill = comp.fill || '#64748b';
+        }
+      });
+
+      const svgString = new XMLSerializer().serializeToString(clone);
+      const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+      const URL = window.URL || window.webkitURL || window;
+      const blobURL = URL.createObjectURL(svgBlob);
+
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scale = 2; // Retina 2x คมชัดสูงสำหรับทำสไลด์และรายงาน
+        canvas.width = width * scale;
+        canvas.height = height * scale;
+
+        const ctx = canvas.getContext('2d');
+        // เติมพื้นหลังสีขาวป้องกันปัญหาพื้นหลังโปร่งใส
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.scale(scale, scale);
+        ctx.drawImage(image, 0, 0, width, height);
+
+        URL.revokeObjectURL(blobURL);
+
+        const pngUrl = canvas.toDataURL('image/png');
+        const downloadLink = document.createElement('a');
+        downloadLink.download = `chart_${selectedChartType}_${Date.now()}.png`;
+        downloadLink.href = pngUrl;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+
+        setIsExporting(false);
+        setExportSuccess(true);
+        setTimeout(() => setExportSuccess(false), 2000);
+      };
+      image.onerror = (e) => {
+        console.error('Export PNG failed:', e);
+        setIsExporting(false);
+      };
+      image.src = blobURL;
+    } catch (err) {
+      console.error('Export PNG error:', err);
+      setIsExporting(false);
+    }
+  };
 
   if (!visualization || visualization.recommended_chart === 'none') {
     return null;
@@ -158,35 +240,49 @@ export default function ChartRenderer({ visualization }) {
           )}
         </div>
 
-        {/* Chart Switcher Buttons */}
-        <div className="chart-switcher-group">
+        <div className="chart-actions-group">
+          {/* Chart Switcher Buttons */}
+          <div className="chart-switcher-group">
+            <button
+              className={`chart-switch-btn ${selectedChartType === 'bar' ? 'active' : ''}`}
+              onClick={() => setSelectedChartType('bar')}
+              title="สลับเป็นกราฟแท่ง (Bar Chart)"
+            >
+              <BarChart3 size={14} />
+            </button>
+            <button
+              className={`chart-switch-btn ${selectedChartType === 'line' ? 'active' : ''}`}
+              onClick={() => setSelectedChartType('line')}
+              title="สลับเป็นกราฟเส้น (Line Chart)"
+            >
+              <TrendingUp size={14} />
+            </button>
+            <button
+              className={`chart-switch-btn ${selectedChartType === 'pie' ? 'active' : ''}`}
+              onClick={() => setSelectedChartType('pie')}
+              title="สลับเป็นแผนภูมิวงกลม (Pie Chart)"
+            >
+              <PieIcon size={14} />
+            </button>
+            <button
+              className={`chart-switch-btn ${selectedChartType === 'area' ? 'active' : ''}`}
+              onClick={() => setSelectedChartType('area')}
+              title="สลับเป็นกราฟพื้นที่ (Area Chart)"
+            >
+              <Layers size={14} />
+            </button>
+          </div>
+
+          {/* Export Chart as PNG for Presentation */}
           <button
-            className={`chart-switch-btn ${selectedChartType === 'bar' ? 'active' : ''}`}
-            onClick={() => setSelectedChartType('bar')}
-            title="สลับเป็นกราฟแท่ง (Bar Chart)"
+            type="button"
+            className={`chart-export-btn ${exportSuccess ? 'success' : ''}`}
+            onClick={handleExportPng}
+            disabled={isExporting}
+            title="ส่งออกกราฟเป็นรูปภาพ PNG คมชัดสูง (สำหรับทำสไลด์/พรีเซนต์)"
           >
-            <BarChart3 size={14} />
-          </button>
-          <button
-            className={`chart-switch-btn ${selectedChartType === 'line' ? 'active' : ''}`}
-            onClick={() => setSelectedChartType('line')}
-            title="สลับเป็นกราฟเส้น (Line Chart)"
-          >
-            <TrendingUp size={14} />
-          </button>
-          <button
-            className={`chart-switch-btn ${selectedChartType === 'pie' ? 'active' : ''}`}
-            onClick={() => setSelectedChartType('pie')}
-            title="สลับเป็นแผนภูมิวงกลม (Pie Chart)"
-          >
-            <PieIcon size={14} />
-          </button>
-          <button
-            className={`chart-switch-btn ${selectedChartType === 'area' ? 'active' : ''}`}
-            onClick={() => setSelectedChartType('area')}
-            title="สลับเป็นกราฟพื้นที่ (Area Chart)"
-          >
-            <Layers size={14} />
+            {exportSuccess ? <Check size={13} /> : <Camera size={13} />}
+            <span>{exportSuccess ? 'บันทึกแล้ว' : isExporting ? 'กำลังบันทึก...' : 'ส่งออก PNG'}</span>
           </button>
         </div>
       </div>
@@ -203,7 +299,7 @@ export default function ChartRenderer({ visualization }) {
       )}
 
       {/* Render Selected Chart Type with Custom Hover Tooltip */}
-      <div style={{ width: '100%', height: 290 }}>
+      <div ref={chartContainerRef} style={{ width: '100%', height: 290 }}>
         {selectedChartType === 'bar' && (
           <ResponsiveContainer>
             <BarChart data={data} margin={{ top: 15, right: 20, left: 10, bottom: 45 }}>
