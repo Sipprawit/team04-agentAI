@@ -91,7 +91,13 @@ export default function App() {
   const [sessions, setSessions] = useState(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_SESSIONS_KEY);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.map(s => ({
+          ...s,
+          title: /^การสนทนาใหม่(\s*\d+)?$/.test(s.title) ? 'การสนทนาใหม่' : s.title
+        }));
+      }
     } catch (_e) {}
     return [{ id: 'session_default', title: 'การวิเคราะห์ข้อมูลและสถิติ' }];
   });
@@ -248,10 +254,13 @@ export default function App() {
       try {
         const backendSessions = await listSessions();
         if (backendSessions && backendSessions.length > 0) {
-          const formatted = backendSessions.map(s => ({
-            id: s.session_id,
-            title: s.title || 'การสนทนา'
-          }));
+          const formatted = backendSessions.map(s => {
+            const rawTitle = s.title || 'การสนทนา';
+            return {
+              id: s.session_id,
+              title: /^การสนทนาใหม่(\s*\d+)?$/.test(rawTitle) ? 'การสนทนาใหม่' : rawTitle
+            };
+          });
           setSessions(formatted);
           if (!backendSessions.some(s => s.session_id === activeSession)) {
             setActiveSession(backendSessions[0].session_id);
@@ -655,7 +664,7 @@ export default function App() {
   // New Chat Session
   const handleNewChat = async () => {
     const newId = `session_${Date.now()}`;
-    const newTitle = `การสนทนาใหม่ ${sessions.length + 1}`;
+    const newTitle = 'การสนทนาใหม่';
     const newSession = {
       id: newId,
       title: newTitle

@@ -50,8 +50,13 @@ def _init_part4_tables():
                 pinned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """))
-        # ทำความสะอาดชื่อ session เก่าที่เคยบันทึกเป็น markdown นำเข้าข้อมูล
+        # ทำความสะอาดชื่อ session เก่าที่เคยมีตัวเลขต่อท้าย หรือเป็น markdown
         try:
+            conn.execute(text("""
+                UPDATE chat_sessions 
+                SET title = 'การสนทนาใหม่' 
+                WHERE title LIKE 'การสนทนาใหม่ %';
+            """))
             conn.execute(text("""
                 UPDATE chat_sessions 
                 SET title = 'ชุดข้อมูล: ' || substr(title, instr(title, '`') + 1, instr(substr(title, instr(title, '`') + 1), '`') - 1) 
@@ -69,11 +74,13 @@ def _init_part4_tables():
 
 
 def _clean_session_title(title: str) -> str:
-    """ทำความสะอาดชื่อหัวข้อสนทนา ป้องกันข้อความ Markdown จากการอัปโหลดไฟล์ตกค้าง"""
+    """ทำความสะอาดชื่อหัวข้อสนทนา ป้องกันข้อความ Markdown ตกค้าง และตัดตัวเลขต่อท้ายการสนทนาใหม่"""
     if not title:
         return "การสนทนาใหม่"
+    import re
+    if re.match(r"^การสนทนาใหม่(\s*\d+)?$", title):
+        return "การสนทนาใหม่"
     if title.startswith("**นำเข้าชุดข้อมูลเข้าสู่ตาราง `") or title.startswith("**นำเข้า"):
-        import re
         m = re.search(r"`([^`]+)`", title)
         if m:
             return f"ชุดข้อมูล: {m.group(1)}"
