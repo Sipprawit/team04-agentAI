@@ -58,7 +58,6 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://localhost",
         "http://127.0.0.1",
-        "*"
     ],
     allow_origin_regex=r"^https?://.*",
     allow_credentials=True,
