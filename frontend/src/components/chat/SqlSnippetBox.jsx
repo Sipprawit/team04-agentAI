@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { Code, Copy, Check, Sparkles, Info } from 'lucide-react';
 
 export default function SqlSnippetBox({ sql, explanation, confidence }) {
@@ -9,12 +9,34 @@ export default function SqlSnippetBox({ sql, explanation, confidence }) {
   const handleCopy = async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(sql);
+    let success = false;
+    if (navigator?.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(sql);
+        success = true;
+      } catch {
+        // Fallback below
+      }
+    }
+    if (!success) {
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = sql;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        textArea.style.top = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        success = document.execCommand('copy');
+        document.body.removeChild(textArea);
+      } catch (err) {
+        console.error('Copy fallback failed:', err);
+      }
+    }
+    if (success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback
     }
   };
 

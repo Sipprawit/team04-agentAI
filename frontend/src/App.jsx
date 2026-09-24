@@ -151,8 +151,23 @@ export default function App() {
   const [isDraggingResizer, setIsDraggingResizer] = useState(false);
   const splitContainerRef = useRef(null);
 
-  // 4. Toast Notification State
-  const [toast, setToast] = useState(null);
+  // 4. Toast Notification State & Queue
+  const [toasts, setToasts] = useState([]);
+  const showToast = useCallback((toastData) => {
+    if (!toastData) return;
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev.slice(-3), { ...toastData, id }]);
+  }, []);
+  const removeToast = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+  const setToast = showToast; // Backwards-compatible alias for existing callers
+
+  // Ref to track activeSession synchronously to prevent race conditions during async queries
+  const activeSessionRef = useRef(activeSession);
+  useEffect(() => {
+    activeSessionRef.current = activeSession;
+  }, [activeSession]);
 
   // 5. Input & Modal States
   const [input, setInput] = useState('');
@@ -358,13 +373,25 @@ export default function App() {
     setActiveMessage(lastAi || null);
   }, [activeSession, messagesBySession]);
 
-  // Save to localStorage as quick cache
+  // Save to localStorage as quick cache (strip heavy rawData to prevent storage bloat)
   useEffect(() => {
     try {
       localStorage.setItem(LOCAL_STORAGE_SESSIONS_KEY, JSON.stringify(sessions));
-      localStorage.setItem(LOCAL_STORAGE_MESSAGES_KEY, JSON.stringify(messagesBySession));
+      const lightweightMessages = {};
+      Object.keys(messagesBySession).forEach(sId => {
+        lightweightMessages[sId] = (messagesBySession[sId] || []).map(m => {
+          if (m.rawData && m.rawData.length > 0) {
+            const { rawData: _unused, ...rest } = m;
+            return { ...rest, rawData: [] };
+          }
+          return m;
+        });
+      });
+      localStorage.setItem(LOCAL_STORAGE_MESSAGES_KEY, JSON.stringify(lightweightMessages));
       localStorage.setItem(LOCAL_STORAGE_PINNED_KEY, JSON.stringify(pinnedItems));
-    } catch (_e) {}
+    } catch (err) {
+      console.warn('Storage quota exceeded or error caching to localStorage:', err);
+    }
   }, [sessions, messagesBySession, pinnedItems]);
 
   // Auto scroll chat
@@ -409,7 +436,7 @@ export default function App() {
     if (!queryToSend.trim() || isLoading) return;
 
     if (!hasUploadedDataset) {
-      setToast({
+      showToast({
         type: 'error',
         title: 'ไม่พบชุดข้อมูลในระบบ',
         message: 'ชุดข้อมูลถูกลบออกจากระบบแล้ว โปรดนำเข้าไฟล์ชุดข้อมูล (CSV) ใหม่เพื่อดำเนินการสอบถาม'
@@ -418,6 +445,8 @@ export default function App() {
       return;
     }
 
+    const targetSessionId = activeSession;
+
     const userMessage = {
       id: `usr_${Date.now()}`,
       role: 'user',
@@ -425,10 +454,10 @@ export default function App() {
       timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
     };
 
-    // Update local state
+    // Update local state for target session
     setMessagesBySession(prev => ({
       ...prev,
-      [activeSession]: [...(prev[activeSession] || []), userMessage]
+      [targetSessionId]: [...(prev[targetSessionId] || []), userMessage]
     }));
 
     setInput('');
@@ -436,17 +465,17 @@ export default function App() {
     setErrorBanner(null);
 
     // Persist user message to SQLite in background
-    saveChatMessage(activeSession, {
+    saveChatMessage(targetSessionId, {
       role: 'user',
       content: userMessage.text,
       metadata: null
-    }).catch(() => {});
+    }).catch(err => console.warn('Could not persist user message to SQLite:', err));
 
     // Auto-update session title based on first query
     const newTitle = generateSessionTitle(queryToSend);
     let shouldUpdateSessionTitle = false;
     setSessions(prev => prev.map(s => {
-      if (s.id === activeSession && (
+      if (s.id === targetSessionId && (
         s.title.startsWith('การสนทนาใหม่') ||
         s.title === 'การวิเคราะห์ข้อมูลและสถิติ' ||
         s.title.startsWith('ชุดข้อมูล:') ||
@@ -459,12 +488,13 @@ export default function App() {
       return s;
     }));
     if (shouldUpdateSessionTitle) {
-      updateSession(activeSession, newTitle).catch(() => {});
+      updateSession(targetSessionId, newTitle).catch(err => console.warn('Could not update session title:', err));
     }
 
     try {
-      // Send last 5 messages as context
-      const historyContext = (currentMessages.slice(-5) || []).map(m => ({
+      // Send last 5 messages of the target session as context
+      const sessionHistory = messagesBySession[targetSessionId] || [];
+      const historyContext = (sessionHistory.slice(-5) || []).map(m => ({
         role: m.role,
         text: m.text
       }));
@@ -487,11 +517,11 @@ export default function App() {
 
       setMessagesBySession(prev => ({
         ...prev,
-        [activeSession]: [...(prev[activeSession] || []), aiMessage]
+        [targetSessionId]: [...(prev[targetSessionId] || []), aiMessage]
       }));
 
       // Persist AI message to SQLite in background
-      saveChatMessage(activeSession, {
+      saveChatMessage(targetSessionId, {
         role: 'assistant',
         content: aiMessage.text,
         metadata: {
@@ -503,15 +533,18 @@ export default function App() {
           followUpQuestions: aiMessage.followUpQuestions,
           userQuery: aiMessage.userQuery
         }
-      }).catch(() => {});
+      }).catch(err => console.warn('Could not persist AI message to SQLite:', err));
 
-      setActiveMessage(aiMessage);
-      if (aiMessage.visualization && aiMessage.visualization.recommended_chart !== 'none') {
-        setAnalyticsTab('insights');
-        setIsRightPanelOpen(true);
-      }
-      if (data.follow_up_questions && data.follow_up_questions.length > 0) {
-        setSuggestedQueries(data.follow_up_questions);
+      // Only update the active message and panel if user is STILL in targetSessionId
+      if (activeSessionRef.current === targetSessionId) {
+        setActiveMessage(aiMessage);
+        if (aiMessage.visualization && aiMessage.visualization.recommended_chart !== 'none') {
+          setAnalyticsTab('insights');
+          setIsRightPanelOpen(true);
+        }
+        if (data.follow_up_questions && data.follow_up_questions.length > 0) {
+          setSuggestedQueries(data.follow_up_questions);
+        }
       }
     } catch (error) {
       console.error("Query execution error:", error);
@@ -532,10 +565,12 @@ export default function App() {
 
       setMessagesBySession(prev => ({
         ...prev,
-        [activeSession]: [...(prev[activeSession] || []), errorAiMsg]
+        [targetSessionId]: [...(prev[targetSessionId] || []), errorAiMsg]
       }));
 
-      setErrorBanner(errorMsg);
+      if (activeSessionRef.current === targetSessionId) {
+        setErrorBanner(errorMsg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -591,10 +626,12 @@ export default function App() {
 
     try {
       await pinItemToDashboard(newItem);
-    } catch (_e) {}
+    } catch (err) {
+      console.warn('Could not sync pinned item to backend SQLite:', err);
+    }
 
     setPinnedItems(prev => [newItem, ...prev]);
-    setToast({
+    showToast({
       type: 'pin',
       title: 'ปักหมุดสำเร็จ',
       message: 'บันทึกรายงานและแผนภูมิเข้าสู่แดชบอร์ดเรียบร้อยแล้ว'
@@ -604,9 +641,11 @@ export default function App() {
   const handleUnpinItem = async (id) => {
     try {
       await unpinItem(id);
-    } catch (_e) {}
+    } catch (err) {
+      console.warn('Could not unpin item from backend SQLite:', err);
+    }
     setPinnedItems(prev => prev.filter(item => item.id !== id));
-    setToast({
+    showToast({
       type: 'info',
       title: 'นำรายการออกแล้ว',
       message: 'ลบรายการออกจากแดชบอร์ดเรียบร้อย'
@@ -624,7 +663,9 @@ export default function App() {
 
     try {
       await createSession(newId, newTitle);
-    } catch (_e) {}
+    } catch (err) {
+      console.warn('Could not sync new session to backend SQLite:', err);
+    }
 
     setSessions(prev => [newSession, ...prev]);
     setActiveSession(newId);
@@ -649,7 +690,7 @@ export default function App() {
   // Delete Session (via right-click context menu in sidebar)
   const handleDeleteSession = async (sessId) => {
     if (sessions.length <= 1) {
-      setToast({
+      showToast({
         type: 'error',
         title: 'ไม่สามารถลบได้',
         message: 'ระบบต้องการบทสนทนาอย่างน้อย 1 รายการ'
@@ -659,7 +700,9 @@ export default function App() {
 
     try {
       await deleteSession(sessId);
-    } catch (_e) {}
+    } catch (err) {
+      console.warn('Could not delete session from backend SQLite:', err);
+    }
 
     // Cascade delete pinned items associated with this session
     const sessionMsgs = messagesBySession[sessId] || [];
@@ -826,8 +869,8 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Floating Toast Notification */}
-      <Toast toast={toast} onClose={() => setToast(null)} />
+      {/* Floating Toast Notification Stack */}
+      <Toast toasts={toasts} onRemove={removeToast} />
 
       {/* 1. Left Sidebar (Collapsible with right-click delete) */}
       <ChatHistorySidebar

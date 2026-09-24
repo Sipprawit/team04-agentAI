@@ -1,17 +1,13 @@
 import React, { useEffect } from 'react';
 import { CheckCircle2, AlertCircle, Pin, Database, Info, X } from 'lucide-react';
 
-export default function Toast({ toast, onClose }) {
+function SingleToast({ toast, onClose }) {
   useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => {
-        onClose();
-      }, toast.duration || 3200);
-      return () => clearTimeout(timer);
-    }
+    const timer = setTimeout(() => {
+      onClose();
+    }, toast.duration || 3500);
+    return () => clearTimeout(timer);
   }, [toast, onClose]);
-
-  if (!toast) return null;
 
   const getIcon = () => {
     switch (toast.type) {
@@ -35,9 +31,30 @@ export default function Toast({ toast, onClose }) {
         <div className="toast-title">{toast.title || 'แจ้งเตือนระบบ'}</div>
         <div className="toast-message">{toast.message}</div>
       </div>
-      <button onClick={onClose} className="toast-close-btn">
+      <button onClick={onClose} className="toast-close-btn" aria-label="ปิดการแจ้งเตือน">
         <X size={14} />
       </button>
+    </div>
+  );
+}
+
+export default function Toast({ toast, toasts, onClose, onRemove }) {
+  const items = toasts || (toast ? [toast] : []);
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="floating-toasts-wrapper">
+      {items.map((item, idx) => (
+        <SingleToast
+          key={item.id || idx}
+          toast={item}
+          onClose={() => {
+            if (onRemove && item.id) onRemove(item.id);
+            else if (onClose) onClose();
+          }}
+        />
+      ))}
     </div>
   );
 }

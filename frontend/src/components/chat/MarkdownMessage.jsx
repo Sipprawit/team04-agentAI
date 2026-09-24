@@ -9,12 +9,34 @@ export default function MarkdownMessage({ content, allowCopy = true }) {
   if (!content) return null;
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(content);
+    let success = false;
+    if (navigator?.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(content);
+        success = true;
+      } catch {
+        // Fallback below
+      }
+    }
+    if (!success) {
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = content;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        textArea.style.top = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        success = document.execCommand('copy');
+        document.body.removeChild(textArea);
+      } catch (err) {
+        console.error('Copy fallback failed:', err);
+      }
+    }
+    if (success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback
     }
   };
 
@@ -24,6 +46,9 @@ export default function MarkdownMessage({ content, allowCopy = true }) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          a: ({ node: _node, ...props }) => (
+            <a target="_blank" rel="noopener noreferrer" className="md-link" {...props} />
+          ),
           table: ({ node: _node, ...props }) => (
             <div className="md-table-wrapper">
               <table className="md-table" {...props} />

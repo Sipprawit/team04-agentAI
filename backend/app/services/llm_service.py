@@ -17,6 +17,8 @@ def get_llm() -> ChatGroq:
         api_key=settings.GROQ_API_KEY,
         temperature=0.2,       # ความสร้างสรรค์ (0 = แม่นยำ, 1 = สร้างสรรค์)
         max_tokens=2048,       # จำนวน token สูงสุดของคำตอบ
+        request_timeout=45.0,  # จำกัดเวลารอ API ตอบกลับ 45 วินาที ป้องกันคำสั่งค้าง
+        max_retries=2,         # retry อัตโนมัติเมื่อเกิดข้อผิดพลาดชั่วคราว
     )
     return llm
 

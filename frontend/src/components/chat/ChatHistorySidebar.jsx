@@ -90,8 +90,16 @@ export default function ChatHistorySidebar({
           {sessions.map((sess) => (
             <div
               key={sess.id}
+              role="button"
+              tabIndex={0}
               className={`session-item ${activeSession === sess.id ? 'active' : ''}`}
               onClick={() => onSelectSession(sess.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSelectSession(sess.id);
+                }
+              }}
               onContextMenu={(e) => handleContextMenu(e, sess.id)}
               title="คลิกเพื่อเปิดบทสนทนานี้"
             >

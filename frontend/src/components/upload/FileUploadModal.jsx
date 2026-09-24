@@ -122,8 +122,20 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    if (!file || !tableName.trim()) {
+    const trimmedName = tableName.trim();
+    if (!file || !trimmedName) {
       setMessage({ type: 'error', text: 'กรุณาเลือกไฟล์ข้อมูล และระบุชื่อตารางในฐานข้อมูล' });
+      return;
+    }
+
+    const cleanTableName = trimmedName
+      .replace(/[^a-zA-Z0-9_\u0E00-\u0E7F]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '')
+      .toLowerCase();
+
+    if (!cleanTableName) {
+      setMessage({ type: 'error', text: 'ชื่อตารางไม่ถูกต้อง กรุณาใช้ตัวอักษรภาษาไทย ภาษาอังกฤษ หรือตัวเลข' });
       return;
     }
 
@@ -132,7 +144,7 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
     setPiiWarnings([]);
 
     try {
-      const result = await uploadCsvFile(file, tableName.trim());
+      const result = await uploadCsvFile(file, cleanTableName);
       setUploadResult(result);
 
       if (result.pii_warnings && result.pii_warnings.length > 0) {
