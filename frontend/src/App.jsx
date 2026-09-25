@@ -937,8 +937,8 @@ export default function App() {
               className="nav-btn-intro-guide"
               title="ดูหน้าแนะนำระบบและคู่มือ (Intro)"
             >
-              <Sparkles size={14} className="text-amber-500" />
-              <span>แนะนำระบบ</span>
+              <Sparkles size={14} className="text-amber-500"  />
+              <span>กลับสู่หน้าแนะนำ</span>
             </button>
             {!isRightPanelOpen && (
               <button

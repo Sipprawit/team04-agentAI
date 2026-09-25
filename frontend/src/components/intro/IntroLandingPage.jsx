@@ -75,9 +75,9 @@ export default function IntroLandingPage({ onStartApp }) {
 
           {/* Sub-headline description */}
           <p className="hero-subtitle">
-            Transform natural Thai language queries into safe SQL, instant statistical summaries, and interactive visual dashboards.
+            แปลงคำถามภาษาไทยเป็นคำสั่ง SQL วิเคราะห์สถิติ และสร้างแดชบอร์ดสรุปผลอย่างแม่นยำ ปลอดภัยระดับองค์กร
             <span className="hero-subtitle-th">
-              (สืบค้นข้อมูล แปลงคำถามภาษาไทยเป็นคำสั่ง SQL วิเคราะห์สถิติ และสร้างรายงานอัตโนมัติด้วยระบบความปลอดภัยระดับองค์กร)
+              (Transform natural Thai language queries into safe SQL, instant statistical summaries, and interactive visual dashboards.)
             </span>
           </p>
 
@@ -131,9 +131,9 @@ export default function IntroLandingPage({ onStartApp }) {
               How It Works <span className="highlight-text">• 3 ขั้นตอนการวิเคราะห์ข้อมูลสู่แดชบอร์ด</span>
             </h2>
             <p className="section-subtitle">
-              From raw spreadsheet datasets to comprehensive executive visual dashboards in seconds.
+              เปลี่ยนข้อมูลดิบสู่แดชบอร์ดสรุปผลเชิงลึกอย่างเป็นระบบ ไร้ความซับซ้อน
               <span className="section-subtitle-th">
-                (เปลี่ยนข้อมูลดิบสู่แดชบอร์ดสรุปผลเชิงลึกอย่างเป็นระบบ ไร้ความซับซ้อน)
+                (From raw spreadsheet datasets to comprehensive executive visual dashboards in seconds.)
               </span>
             </p>
           </div>
@@ -185,16 +185,16 @@ export default function IntroLandingPage({ onStartApp }) {
                   <span className="step-heading-th">นำเข้าชุดข้อมูล</span>
                 </h3>
                 <p className="step-desc">
-                  Upload Excel (.xlsx, .xls) or CSV files. The engine automatically profiles schema, infers data types, detects Thai encodings (UTF-8, CP874), and checks for personal privacy data (PDPA).
+                  อัปโหลดไฟล์สเปรดชีต Excel (.xlsx, .xls) หรือ CSV ระบบจะวิเคราะห์โครงสร้างตาราง ระบุประเภทข้อมูลอัตโนมัติ ตรวจจับชุดรหัสภาษาไทย (UTF-8, CP874) และตรวจสอบความปลอดภัยของข้อมูลส่วนบุคคล (PDPA)
                 </p>
                 <div className="step-feature-list">
                   <span className="feature-check-item">
                     <Check size={13} className="text-emerald-400" />
-                    <span>Auto Type Inference & Schema Profiling</span>
+                    <span>จำแนกประเภทข้อมูลและตรวจสอบ Schema อัตโนมัติ</span>
                   </span>
                   <span className="feature-check-item">
                     <Check size={13} className="text-emerald-400" />
-                    <span>UTF-8 / CP874 Detection & PDPA Warnings</span>
+                    <span>ตรวจจับรหัสภาษาไทย UTF-8 / CP874 และแจ้งเตือนข้อมูล PDPA</span>
                   </span>
                 </div>
               </div>
@@ -224,7 +224,7 @@ export default function IntroLandingPage({ onStartApp }) {
                   </div>
                   <div className="mockup-status-badge">
                     <Bot size={13} className="text-emerald-400" />
-                    <span>Translating query & validating SQL...</span>
+                    <span>กำลังวิเคราะห์และตรวจสอบความปลอดภัย SQL...</span>
                   </div>
                 </div>
               </div>
@@ -238,16 +238,16 @@ export default function IntroLandingPage({ onStartApp }) {
                   <span className="step-heading-th">วิเคราะห์ภาษาไทยและรันคำสั่ง</span>
                 </h3>
                 <p className="step-desc">
-                  AI translates Thai questions into optimized SQL queries, executes strictly within a 4-layer read-only sandbox, and heals SQL automatically if syntax adjustments are needed.
+                  AI แปลงคำถามภาษาไทยเป็นคำสั่ง SQL ที่ถูกต้องและมีประสิทธิภาพ ประมวลผลอย่างปลอดภัยในสภาพแวดล้อม Read-Only Sandbox พร้อมระบบตรวจสอบและแก้ไขคำสั่งให้อัตโนมัติเมื่อพบข้อผิดพลาด
                 </p>
                 <div className="step-feature-list">
                   <span className="feature-check-item">
                     <Check size={13} className="text-emerald-400" />
-                    <span>4-Layer Read-Only Sandbox (`PRAGMA query_only`)</span>
+                    <span>ระบบความปลอดภัย 4 ชั้น ป้องกันการแก้ไขข้อมูล (PRAGMA query_only)</span>
                   </span>
                   <span className="feature-check-item">
                     <Check size={13} className="text-emerald-400" />
-                    <span>Agentic Self-Correction Loop (Up to 2 Retries)</span>
+                    <span>กลไก Self-Correction ซ่อมแซมคำสั่ง SQL อัตโนมัติสูงสุด 2 รอบ</span>
                   </span>
                 </div>
               </div>
@@ -302,16 +302,16 @@ export default function IntroLandingPage({ onStartApp }) {
                   <span className="step-heading-th">แสดงผลเชิงภาพและส่งออกรายงาน</span>
                 </h3>
                 <p className="step-desc">
-                  Inspect recommended charts (Bar, Line, Area, Pie), review deterministic executive summaries without hallucinations, pin charts to your personal dashboard, and export reports in 2x Retina PNG or CSV.
+                  แสดงผลลัพธ์ผ่านแผนภูมิสถิติที่เหมาะสม (กราฟแท่ง, เส้น, วงกลม) พร้อมบทสรุปสำหรับผู้บริหารจากตัวเลขจริง ปักหมุดกราฟสำคัญลงบนแดชบอร์ดส่วนตัว และส่งออกรายงานเป็นภาพ PNG ความละเอียดสูงหรือไฟล์ CSV ได้ทันที
                 </p>
                 <div className="step-feature-list">
                   <span className="feature-check-item">
                     <Check size={13} className="text-emerald-400" />
-                    <span>Smart Chart Recommendations & Fullscreen Tables</span>
+                    <span>ระบบแนะนำแผนภูมิอัจฉริยะ พร้อมตารางข้อมูลแบบเต็มจอ</span>
                   </span>
                   <span className="feature-check-item">
                     <Check size={13} className="text-emerald-400" />
-                    <span>Pin to Dashboard & High-Res 2x PNG / CSV Export</span>
+                    <span>ปักหมุดแดชบอร์ดส่วนตัว และดาวน์โหลดภาพ 2x Retina PNG หรือไฟล์ CSV</span>
                   </span>
                 </div>
               </div>
@@ -329,9 +329,9 @@ export default function IntroLandingPage({ onStartApp }) {
               Key Capabilities <span className="gradient-text">• จุดเด่นสถาปัตยกรรมระบบ</span>
             </h2>
             <p className="section-subtitle">
-              Engineered with advanced natural language processing, deterministic statistics, and defense-in-depth security.
+              เทคโนโลยีที่ผสานการประมวลผลภาษาธรรมชาติ สถิติเชิงปริมาณ และความปลอดภัยระดับองค์กร
               <span className="section-subtitle-th">
-                (เทคโนโลยีที่ผสานการประมวลผลภาษาธรรมชาติ สถิติเชิงปริมาณ และความปลอดภัยระดับองค์กร)
+                (Engineered with advanced natural language processing, deterministic statistics, and defense-in-depth security.)
               </span>
             </p>
           </div>
@@ -346,7 +346,7 @@ export default function IntroLandingPage({ onStartApp }) {
                 <span className="feature-title-th">เข้าใจไวยากรณ์และบริบทภาษาไทย</span>
               </h4>
               <p className="feature-desc">
-                Converts natural Thai questions into accurate SQLite queries using Few-Shot contextual understanding and schema mapping.
+                แปลงคำถามภาษาไทยทั่วไปเป็น SQLite Query ได้อย่างแม่นยำ พร้อม Few-Shot Learning ที่เข้าใจบริบททางธุรกิจและชื่อคอลัมน์ภาษาไทยได้อย่างเป็นธรรมชาติ
               </p>
             </div>
 
@@ -359,7 +359,7 @@ export default function IntroLandingPage({ onStartApp }) {
                 <span className="feature-title-th">ความปลอดภัยอ่านอย่างเดียว 100%</span>
               </h4>
               <p className="feature-desc">
-                Protected by Pre-validation, AST Sanitizer, C-Engine `PRAGMA query_only = ON;`, execution timeout, and row limits.
+                รันคำสั่งภายใต้เกราะความปลอดภัย Pre-validation, AST Sanitizer และ SQLite PRAGMA query_only = ON ป้องกันการแก้ไขหรือลบข้อมูล 100%
               </p>
             </div>
 
@@ -372,7 +372,7 @@ export default function IntroLandingPage({ onStartApp }) {
                 <span className="feature-title-th">ระบบกู้คืนคำสั่งอัตโนมัติ</span>
               </h4>
               <p className="feature-desc">
-                Automatically diagnoses SQL errors against database schema and corrects queries up to 2 times without user intervention.
+                วิเคราะห์ข้อผิดพลาดและปรับแก้โครงสร้างคำสั่ง SQL ให้อัตโนมัติสูงสุด 2 รอบ โดยที่ผู้ใช้ไม่ต้องพิมพ์คำถามหรือเริ่มกระบวนการใหม่
               </p>
             </div>
 
@@ -385,7 +385,7 @@ export default function IntroLandingPage({ onStartApp }) {
                 <span className="feature-title-th">สถิติจริง ปราศจากการคาดเดา</span>
               </h4>
               <p className="feature-desc">
-                Calculates factual metrics (sum, mean, min, max) with real business units directly from query results—zero hallucinations.
+                คำนวณค่าสถิติ ยอดรวม ค่าเฉลี่ย สูงสุด และต่ำสุดจากตัวเลขจริงในฐานข้อมูล พร้อมระบุหน่วยธุรกิจจริง ปราศจากการคาดเดาหรือมโนข้อมูล
               </p>
             </div>
 
@@ -398,7 +398,7 @@ export default function IntroLandingPage({ onStartApp }) {
                 <span className="feature-title-th">แนะนำแผนภูมิอัตโนมัติ</span>
               </h4>
               <p className="feature-desc">
-                Selects the best visualization (Bar, Line, Area, Pie) based on data cardinality and provides 2x Retina PNG export.
+                เลือกและสร้างแผนภูมิที่เหมาะสม (แท่ง, เส้น, พื้นที่, วงกลม) ตามชนิดข้อมูลอัตโนมัติ พร้อมส่งออกภาพคมชัดระดับ 2x Retina
               </p>
             </div>
 
@@ -411,7 +411,7 @@ export default function IntroLandingPage({ onStartApp }) {
                 <span className="feature-title-th">แดชบอร์ดส่วนตัวและประวัติแชท</span>
               </h4>
               <p className="feature-desc">
-                Pin critical insight cards to your customizable dashboard grid, and manage isolated SQLite conversation histories effortlessly.
+                ปักหมุดการ์ดสรุปผลสำคัญลงบนแดชบอร์ดส่วนตัว และจัดการแยกประวัติการสนทนาบนฐานข้อมูล SQLite อย่างอิสระ
               </p>
             </div>
           </div>
