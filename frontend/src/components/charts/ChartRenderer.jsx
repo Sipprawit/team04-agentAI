@@ -97,27 +97,102 @@ export default function ChartRenderer({ visualization }) {
 
   const handleExportPng = () => {
     if (!chartContainerRef.current || isExporting) return;
-    // ค้นหา SVG ของ Recharts โดยตรงภายใน chartContainerRef (ไม่ปนกับไอคอนบน Toolbar)
-    const svgElement = chartContainerRef.current.querySelector('svg.recharts-surface') || chartContainerRef.current.querySelector('svg');
+
+    // 1. ค้นหาเฉพาะ SVG กราฟหลัก (คัดกรองไอคอนขนาดเล็ก 14x14 ใน Legend หรือปุ่ม Toolbar ออก)
+    const allSvgs = Array.from(chartContainerRef.current.querySelectorAll('svg'));
+    const candidateSvgs = allSvgs.filter(svg => {
+      if (svg.closest('.recharts-legend-wrapper')) return false;
+      if (svg.closest('button')) return false;
+      if (svg.closest('.chart-actions-group')) return false;
+      return true;
+    });
+
+    const svgsToSearch = candidateSvgs.length > 0 ? candidateSvgs : allSvgs;
+    let svgElement = null;
+    let maxArea = 0;
+
+    for (const svg of svgsToSearch) {
+      const b = svg.getBoundingClientRect();
+      const w = b.width || svg.clientWidth || parseFloat(svg.getAttribute('width')) || 0;
+      const h = b.height || svg.clientHeight || parseFloat(svg.getAttribute('height')) || 0;
+      const area = w * h;
+      if (area > maxArea) {
+        maxArea = area;
+        svgElement = svg;
+      }
+    }
+
     if (!svgElement) return;
 
     try {
       setIsExporting(true);
       const bbox = svgElement.getBoundingClientRect();
-      const width = Math.round(bbox.width || svgElement.clientWidth || 650);
-      const height = Math.round(bbox.height || svgElement.clientHeight || 280);
+      const width = Math.round(bbox.width || svgElement.clientWidth || parseFloat(svgElement.getAttribute('width')) || 650);
+      const height = Math.round(bbox.height || svgElement.clientHeight || parseFloat(svgElement.getAttribute('height')) || 290);
 
-      // ดึงรายการ Legend (หากมี เช่น ใน Pie Chart) เพื่อนำไปวาดต่อท้ายในรูปภาพ PNG อย่างสมบูรณ์
+      // 2. ดึงรายการ Legend (เช่น ใน Pie Chart) เพื่อจัดวางหลายบรรทัดอัตโนมัติ
       const legendWrapper = chartContainerRef.current.querySelector('.recharts-legend-wrapper');
-      const legendItems = legendWrapper ? Array.from(legendWrapper.querySelectorAll('.recharts-legend-item')) : [];
+      const rawLegendItems = legendWrapper ? Array.from(legendWrapper.querySelectorAll('.recharts-legend-item')) : [];
 
-      // โคลน SVG เพื่อเซ็ตแอตทริบิวต์และสไตล์โดยไม่กระทบ DOM ปัจจุบัน
+      const legendItemsData = [];
+      if (rawLegendItems.length > 0) {
+        const measureCanvas = document.createElement('canvas');
+        const measureCtx = measureCanvas.getContext('2d');
+        measureCtx.font = '500 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+        rawLegendItems.forEach((item, idx) => {
+          const textNode = item.querySelector('.recharts-legend-item-text');
+          const text = textNode ? textNode.textContent.trim() : (data[idx]?.name || `หมวด ${idx + 1}`);
+          const iconEl = item.querySelector('path, rect, circle, svg');
+          const color = iconEl?.getAttribute('fill') ||
+            iconEl?.getAttribute('stroke') ||
+            textNode?.style?.color ||
+            COLORS[idx % COLORS.length];
+
+          const textWidth = measureCtx.measureText(text).width;
+          const totalW = Math.round(12 + 6 + textWidth + 18);
+          legendItemsData.push({ text, color, width: totalW });
+        });
+      }
+
+      // จัดกลุ่ม Legend Items เป็นแถวๆ (Multi-line wrap) ป้องกันข้อความล้นออกนอกรูป
+      const availableWidth = width - 40;
+      const legendRows = [];
+      let currentRow = [];
+      let currentRowWidth = 0;
+
+      legendItemsData.forEach(item => {
+        if (currentRow.length > 0 && currentRowWidth + item.width > availableWidth) {
+          legendRows.push({ items: currentRow, totalWidth: currentRowWidth });
+          currentRow = [item];
+          currentRowWidth = item.width;
+        } else {
+          currentRow.push(item);
+          currentRowWidth += item.width;
+        }
+      });
+      if (currentRow.length > 0) {
+        legendRows.push({ items: currentRow, totalWidth: currentRowWidth });
+      }
+
+      const rowHeight = 22;
+      const legendTopPad = 16;
+      const legendBottomPad = 16;
+      const legendHeight = legendRows.length > 0 ? (legendRows.length * rowHeight + legendTopPad + legendBottomPad) : 0;
+      const totalHeight = height + legendHeight;
+
+      // 3. โคลน SVG เพื่อเซ็ตแอตทริบิวต์และสไตล์โดยไม่กระทบ DOM ปัจจุบัน
       const clone = svgElement.cloneNode(true);
       clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
       clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
       clone.setAttribute('width', String(width));
       clone.setAttribute('height', String(height));
-      clone.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      const existingViewBox = svgElement.getAttribute('viewBox');
+      if (existingViewBox) {
+        clone.setAttribute('viewBox', existingViewBox);
+      } else {
+        clone.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      }
 
       // ฝัง Font และ Fill สีสำหรับ Text และ Tspan ให้เรนเดอร์ภาษาไทยและตัวเลขได้คมชัด
       const origTexts = svgElement.querySelectorAll('text, tspan');
@@ -132,6 +207,21 @@ export default function ChartRenderer({ visualization }) {
         }
       });
 
+      // รักษาสีเส้นเชื่อมโยงป้ายข้อมูล (label line) ใน Pie Chart
+      const origPaths = svgElement.querySelectorAll('path.recharts-pie-label-line, path.recharts-curve');
+      const clonePaths = clone.querySelectorAll('path.recharts-pie-label-line, path.recharts-curve');
+      origPaths.forEach((orig, idx) => {
+        if (clonePaths[idx]) {
+          const comp = window.getComputedStyle(orig);
+          if (comp.stroke && comp.stroke !== 'none') {
+            clonePaths[idx].setAttribute('stroke', comp.stroke);
+          }
+          if (comp.strokeWidth) {
+            clonePaths[idx].setAttribute('stroke-width', comp.strokeWidth);
+          }
+        }
+      });
+
       const svgString = new XMLSerializer().serializeToString(clone);
       const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
       const URL = window.URL || window.webkitURL || window;
@@ -141,8 +231,6 @@ export default function ChartRenderer({ visualization }) {
       image.onload = () => {
         const canvas = document.createElement('canvas');
         const scale = 2; // Retina 2x คมชัดสูงสำหรับทำสไลด์และรายงาน
-        const legendHeight = legendItems.length > 0 ? 50 : 0;
-        const totalHeight = height + legendHeight;
 
         canvas.width = width * scale;
         canvas.height = totalHeight * scale;
@@ -155,39 +243,31 @@ export default function ChartRenderer({ visualization }) {
         ctx.scale(scale, scale);
         ctx.drawImage(image, 0, 0, width, height);
 
-        // วาดแถบคำอธิบาย (Legend) ที่ด้านล่างของรูปภาพกรณีเป็น Pie Chart หรือกราฟที่มี Legend
-        if (legendItems.length > 0) {
+        // วาดแถบคำอธิบาย (Legend) จัดกึ่งกลางและตัดขึ้นบรรทัดใหม่อัตโนมัติ
+        if (legendRows.length > 0) {
           ctx.font = '500 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
           ctx.textBaseline = 'middle';
 
-          let itemWidths = [];
-          let totalItemsWidth = 0;
-          legendItems.forEach((item, idx) => {
-            const textNode = item.querySelector('.recharts-legend-item-text');
-            const text = textNode ? textNode.textContent : (data[idx]?.name || `หมวด ${idx + 1}`);
-            const textWidth = ctx.measureText(text).width;
-            const w = 14 + textWidth + 16;
-            itemWidths.push({ text, textWidth, totalW: w });
-            totalItemsWidth += w;
-          });
+          let currentY = height + legendTopPad + (rowHeight / 2);
 
-          let startX = Math.max(16, (width - totalItemsWidth) / 2);
-          const legendY = height + 24;
+          legendRows.forEach(row => {
+            let startX = Math.max(20, (width - row.totalWidth) / 2);
 
-          itemWidths.forEach((item, idx) => {
-            const color = COLORS[idx % COLORS.length];
+            row.items.forEach(item => {
+              // 1. วาดจุดสีประจำหมวดหมู่
+              ctx.fillStyle = item.color;
+              ctx.beginPath();
+              ctx.arc(startX + 5, currentY, 5, 0, Math.PI * 2);
+              ctx.fill();
 
-            // วาดจุดสีประจำหมวดหมู่
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(startX + 5, legendY, 5, 0, Math.PI * 2);
-            ctx.fill();
+              // 2. วาดข้อความชื่อหมวดหมู่
+              ctx.fillStyle = '#334155';
+              ctx.fillText(item.text, startX + 16, currentY);
 
-            // วาดข้อความชื่อหมวดหมู่
-            ctx.fillStyle = '#334155';
-            ctx.fillText(item.text, startX + 14, legendY);
+              startX += item.width;
+            });
 
-            startX += item.totalW;
+            currentY += rowHeight;
           });
         }
 
