@@ -33,6 +33,7 @@ import MarkdownMessage from './components/chat/MarkdownMessage';
 import SqlSnippetBox from './components/chat/SqlSnippetBox';
 import FileUploadModal from './components/upload/FileUploadModal';
 import Toast from './components/common/Toast';
+import IntroLandingPage from './components/intro/IntroLandingPage';
 import './App.css';
 
 const LOCAL_STORAGE_SESSIONS_KEY = 'team04_chat_sessions_v4';
@@ -176,6 +177,7 @@ export default function App() {
   }, [activeSession]);
 
   // 5. Input & Modal States
+  const [showIntro, setShowIntro] = useState(true);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStageIdx, setLoadingStageIdx] = useState(0);
@@ -876,6 +878,30 @@ export default function App() {
     }
   };
 
+  // Render Intro Landing Page when active
+  if (showIntro) {
+    return (
+      <div className="app-container">
+        <Toast toasts={toasts} onRemove={removeToast} />
+        <IntroLandingPage
+          onStartApp={(query) => {
+            setShowIntro(false);
+            if (query && typeof query === 'string' && query.trim()) {
+              setInput(query.trim());
+              handleSendMessage(null, query.trim());
+            }
+          }}
+        />
+        <FileUploadModal
+          isOpen={isUploadOpen}
+          onClose={() => setIsUploadOpen(false)}
+          onUploadSuccess={handleUploadSuccess}
+          onDatasetDeleted={handleDatasetDeleted}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="app-container">
       {/* Floating Toast Notification Stack */}
@@ -890,6 +916,7 @@ export default function App() {
         onSelectSession={handleSelectSession}
         onNewChat={handleNewChat}
         onDeleteSession={handleDeleteSession}
+        onOpenIntro={() => setShowIntro(true)}
         user={user}
       />
 
@@ -905,6 +932,15 @@ export default function App() {
           </div>
 
           <div className="navbar-right">
+            <button
+              type="button"
+              onClick={() => setShowIntro(true)}
+              className="nav-btn-intro-guide"
+              title="ดูหน้าแนะนำระบบและคู่มือ (Intro)"
+            >
+              <Sparkles size={14} className="text-amber-500" />
+              <span>แนะนำระบบ</span>
+            </button>
             {!isRightPanelOpen && (
               <button
                 onClick={() => setIsRightPanelOpen(true)}

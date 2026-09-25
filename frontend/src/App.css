@@ -236,6 +236,9 @@ body {
 
 .sidebar-action-container {
   padding: 14px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .new-chat-btn {
@@ -258,6 +261,40 @@ body {
 .new-chat-btn:hover {
   background: var(--primary-700);
   transform: translateY(-1px);
+}
+
+.intro-guide-toggle-btn {
+  width: 100%;
+  padding: 7px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: all 0.2s ease;
+}
+
+.intro-guide-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: translateY(-1px);
+}
+
+.sidebar-collapsed-intro-btn {
+  background: rgba(245, 158, 11, 0.12) !important;
+  color: #f59e0b !important;
+  border: 1px solid rgba(245, 158, 11, 0.25) !important;
+}
+
+.sidebar-collapsed-intro-btn:hover {
+  background: rgba(245, 158, 11, 0.25) !important;
 }
 
 .sidebar-section {
@@ -511,6 +548,27 @@ body {
 
 .nav-btn-open-analytics:hover {
   background: var(--primary-100);
+}
+
+.nav-btn-intro-guide {
+  padding: 6px 13px;
+  background: #ffffff;
+  color: var(--slate-700);
+  border: 1px solid var(--slate-300);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+
+.nav-btn-intro-guide:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: var(--slate-900);
 }
 
 /* --- 5. Split-Screen Panes Body --- */
