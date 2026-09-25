@@ -356,9 +356,9 @@ def _run_query_pipeline(
 
     uploaded_tables = get_uploaded_tables()
 
-    # Safety Fallback: หาก effective_table ยังไม่ถูกระบุสำหรับห้องนี้ แต่ในระบบมีตารางที่อัปโหลดไว้เพียง 1 ตาราง
-    # ให้ผูกตารางนั้นเข้ากับห้องนี้โดยอัตโนมัติ (เช่น เพิ่งอัปโหลดไฟล์เข้ามา หรือห้องเริ่มต้น session_default)
-    if not effective_table and len(uploaded_tables) == 1:
+    # Safety Fallback: เฉพาะกรณีห้องเริ่มต้น session_default หรือไม่ได้ระบุ session_id
+    # หากในระบบมีตารางที่อัปโหลดไว้เพียง 1 ตาราง ให้ผูกตารางนั้นเข้ากับห้องเริ่มต้นอัตโนมัติ
+    if not effective_table and (not session_id or session_id == "session_default") and len(uploaded_tables) == 1:
         effective_table = uploaded_tables[0]
         if session_id:
             try:

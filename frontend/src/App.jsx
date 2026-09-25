@@ -88,6 +88,26 @@ const exportDataToCsv = (data, filename = 'query_result') => {
   URL.revokeObjectURL(url);
 };
 
+// ฟังก์ชันจัดรูปแบบเวลาอย่างปลอดภัย ป้องกัน RangeError: Invalid time value
+const formatTimestamp = (dateVal) => {
+  if (!dateVal) return new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+  try {
+    const rawStr = String(dateVal);
+    const isoStr = rawStr.includes(' ') && !rawStr.includes('T') ? rawStr.replace(' ', 'T') + 'Z' : rawStr;
+    const parsed = new Date(isoStr);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    }
+    const fallback = new Date(rawStr);
+    if (!isNaN(fallback.getTime())) {
+      return fallback.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    }
+    return 'ล่าสุด';
+  } catch {
+    return 'ล่าสุด';
+  }
+};
+
 export default function App() {
   // 1. Session & History State
   const [sessions, setSessions] = useState(() => {
@@ -332,7 +352,7 @@ export default function App() {
             rawData: m.metadata?.rawData || [],
             followUpQuestions: m.metadata?.followUpQuestions || [],
             userQuery: m.metadata?.userQuery || null,
-            timestamp: m.created_at ? new Date(m.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : 'ล่าสุด'
+            timestamp: formatTimestamp(m.created_at)
           };
         });
         setMessagesBySession(prev => ({
@@ -355,6 +375,9 @@ export default function App() {
           } else if (lastAi.rawData && lastAi.rawData.length > 0) {
             setAnalyticsTab('table');
           }
+          if (lastAi.followUpQuestions && lastAi.followUpQuestions.length > 0) {
+            setSuggestedQueries(lastAi.followUpQuestions);
+          }
         } else {
           setActiveMessage(null);
         }
@@ -376,8 +399,15 @@ export default function App() {
       } else if (lastAi.rawData && lastAi.rawData.length > 0) {
         setAnalyticsTab('table');
       }
+      if (lastAi.followUpQuestions && lastAi.followUpQuestions.length > 0) {
+        setSuggestedQueries(lastAi.followUpQuestions);
+      }
     } else {
       setActiveMessage(null);
+      const targetSession = sessions.find(s => s.id === sessionId);
+      if (!targetSession?.tableName) {
+        setSuggestedQueries(DEFAULT_SUGGESTED_QUERIES);
+      }
     }
     fetchSessionHistory(sessionId);
   };
