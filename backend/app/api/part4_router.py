@@ -160,24 +160,33 @@ def create_session(data: Dict[str, Any] = Body(...)):
 
 @router.put("/sessions/{session_id}")
 def update_session(session_id: str, data: Dict[str, Any] = Body(...)):
-    """อัปเดตชื่อ Session หรือ table_name"""
+    """อัปเดตชื่อ Session หรือ table_name (Upsert หากยังไม่มี)"""
     _init_part4_tables()
     title = data.get("title")
     table_name = data.get("table_name")
-    updates = []
-    params = {"sid": session_id}
-    if title is not None:
-        updates.append("title = :title")
-        params["title"] = title
-    if "table_name" in data:
-        updates.append("table_name = :tbl")
-        params["tbl"] = table_name
-    if not updates:
-        return {"status": "success"}
-    updates.append("updated_at = CURRENT_TIMESTAMP")
-    sql = f"UPDATE chat_sessions SET {', '.join(updates)} WHERE session_id = :sid"
     with engine.connect() as conn:
-        conn.execute(text(sql), params)
+        exists = conn.execute(
+            text("SELECT session_id FROM chat_sessions WHERE session_id = :sid"),
+            {"sid": session_id}
+        ).fetchone()
+        if not exists:
+            conn.execute(
+                text("INSERT INTO chat_sessions (session_id, title, table_name) VALUES (:sid, :title, :tbl)"),
+                {"sid": session_id, "title": title or "การสนทนาใหม่", "tbl": table_name}
+            )
+        else:
+            updates = []
+            params = {"sid": session_id}
+            if title is not None:
+                updates.append("title = :title")
+                params["title"] = title
+            if "table_name" in data:
+                updates.append("table_name = :tbl")
+                params["tbl"] = table_name
+            if updates:
+                updates.append("updated_at = CURRENT_TIMESTAMP")
+                sql = f"UPDATE chat_sessions SET {', '.join(updates)} WHERE session_id = :sid"
+                conn.execute(text(sql), params)
         conn.commit()
     return {"status": "success"}
 

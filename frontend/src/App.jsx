@@ -20,6 +20,7 @@ import {
   sendQuery,
   listSessions,
   createSession,
+  updateSession,
   deleteSession,
   getChatHistory,
   saveChatMessage,
@@ -96,11 +97,12 @@ export default function App() {
         const parsed = JSON.parse(saved);
         return parsed.map(s => ({
           ...s,
-          title: /^การสนทนาใหม่(\s*\d+)?$/.test(s.title) ? 'การสนทนาใหม่' : s.title
+          title: /^การสนทนาใหม่(\s*\d+)?$/.test(s.title) ? 'การสนทนาใหม่' : s.title,
+          tableName: s.tableName || null
         }));
       }
     } catch (_e) {}
-    return [{ id: 'session_default', title: 'การวิเคราะห์ข้อมูลและสถิติ' }];
+    return [{ id: 'session_default', title: 'การวิเคราะห์ข้อมูลและสถิติ', tableName: null }];
   });
 
   const [activeSession, setActiveSession] = useState(() => {
@@ -451,17 +453,19 @@ export default function App() {
     const queryToSend = queryTextOverride || input;
     if (!queryToSend.trim() || isLoading) return;
 
-    if (!hasUploadedDataset) {
+    const targetSessionId = activeSession;
+    const targetSession = sessions.find(s => s.id === targetSessionId);
+    const sessionTableName = targetSession?.tableName || null;
+
+    if (!hasUploadedDataset && !sessionTableName) {
       showToast({
         type: 'error',
         title: 'ไม่พบชุดข้อมูลในระบบ',
-        message: 'ชุดข้อมูลถูกลบออกจากระบบแล้ว โปรดนำเข้าไฟล์ชุดข้อมูล (CSV) ใหม่เพื่อดำเนินการสอบถาม'
+        message: 'กรุณานำเข้าไฟล์ชุดข้อมูล (CSV) ก่อนเริ่มต้นสอบถามครับ'
       });
       setIsUploadOpen(true);
       return;
     }
-
-    const targetSessionId = activeSession;
 
     const userMessage = {
       id: `usr_${Date.now()}`,
@@ -489,21 +493,15 @@ export default function App() {
 
     // Auto-update session title based on first query
     const newTitle = generateSessionTitle(queryToSend);
-    let shouldUpdateSessionTitle = false;
-    setSessions(prev => prev.map(s => {
-      if (s.id === targetSessionId && (
-        s.title.startsWith('การสนทนาใหม่') ||
-        s.title === 'การวิเคราะห์ข้อมูลและสถิติ' ||
-        s.title.startsWith('ชุดข้อมูล:') ||
-        s.title.startsWith('**') ||
-        s.title === 'นำเข้าชุดข้อมูล'
-      )) {
-        shouldUpdateSessionTitle = true;
-        return { ...s, title: newTitle };
-      }
-      return s;
-    }));
+    const shouldUpdateSessionTitle = !targetSession || (
+      targetSession.title.startsWith('การสนทนาใหม่') ||
+      targetSession.title === 'การวิเคราะห์ข้อมูลและสถิติ' ||
+      targetSession.title.startsWith('ชุดข้อมูล:') ||
+      targetSession.title.startsWith('**') ||
+      targetSession.title === 'นำเข้าชุดข้อมูล'
+    );
     if (shouldUpdateSessionTitle) {
+      setSessions(prev => prev.map(s => s.id === targetSessionId ? { ...s, title: newTitle } : s));
       updateSession(targetSessionId, newTitle).catch(err => console.warn('Could not update session title:', err));
     }
 
@@ -514,9 +512,6 @@ export default function App() {
         role: m.role,
         text: m.text
       }));
-
-      const targetSession = sessions.find(s => s.id === targetSessionId);
-      const sessionTableName = targetSession?.tableName || null;
 
       const data = await sendQuery(userMessage.text, historyContext, targetSessionId, sessionTableName);
 
@@ -797,22 +792,30 @@ export default function App() {
     }));
 
     // ตั้งชื่อห้องแชทให้ตรงกับชุดข้อมูลที่นำเข้า (หากยังเป็นห้องว่าง/การสนทนาใหม่) และผูก tableName กับ session
+    const targetSessionId = activeSession;
+    const currentSession = sessions.find(s => s.id === targetSessionId);
     const datasetTitle = `ชุดข้อมูล: ${res.table_name}`;
-    let shouldUpdateUploadTitle = false;
-    setSessions(prev => prev.map(s => {
-      if (s.id === activeSession) {
-        if (
-          s.title.startsWith('การสนทนาใหม่') ||
-          s.title === 'การวิเคราะห์ข้อมูลและสถิติ'
-        ) {
-          shouldUpdateUploadTitle = true;
-          return { ...s, title: datasetTitle, tableName: res.table_name };
-        }
-        return { ...s, tableName: res.table_name };
+    const shouldUpdateUploadTitle = !currentSession ||
+      currentSession.title.startsWith('การสนทนาใหม่') ||
+      currentSession.title === 'การวิเคราะห์ข้อมูลและสถิติ';
+
+    const finalTitle = shouldUpdateUploadTitle ? datasetTitle : (currentSession?.title || datasetTitle);
+
+    setSessions(prev => {
+      const exists = prev.some(s => s.id === targetSessionId);
+      if (exists) {
+        return prev.map(s => s.id === targetSessionId ? {
+          ...s,
+          title: shouldUpdateUploadTitle ? datasetTitle : s.title,
+          tableName: res.table_name
+        } : s);
       }
-      return s;
-    }));
-    updateSession(activeSession, shouldUpdateUploadTitle ? datasetTitle : null, res.table_name).catch(() => {});
+      return [{ id: targetSessionId, title: datasetTitle, tableName: res.table_name }, ...prev];
+    });
+
+    updateSession(targetSessionId, finalTitle, res.table_name).catch(err => {
+      console.warn('Could not update session on upload:', err);
+    });
 
     // Persist to SQLite
     saveChatMessage(activeSession, {

@@ -356,6 +356,38 @@ def _run_query_pipeline(
 
     uploaded_tables = get_uploaded_tables()
 
+    # Safety Fallback: หาก effective_table ยังไม่ถูกระบุสำหรับห้องนี้ แต่ในระบบมีตารางที่อัปโหลดไว้เพียง 1 ตาราง
+    # ให้ผูกตารางนั้นเข้ากับห้องนี้โดยอัตโนมัติ (เช่น เพิ่งอัปโหลดไฟล์เข้ามา หรือห้องเริ่มต้น session_default)
+    if not effective_table and len(uploaded_tables) == 1:
+        effective_table = uploaded_tables[0]
+        if session_id:
+            try:
+                from app.db.database import engine
+                from sqlalchemy import text
+                with engine.connect() as conn:
+                    exists = conn.execute(
+                        text("SELECT session_id FROM chat_sessions WHERE session_id = :sid"),
+                        {"sid": session_id}
+                    ).fetchone()
+                    if exists:
+                        conn.execute(
+                            text("UPDATE chat_sessions SET table_name = :tbl WHERE session_id = :sid"),
+                            {"tbl": effective_table, "sid": session_id}
+                        )
+                    else:
+                        conn.execute(
+                            text("INSERT INTO chat_sessions (session_id, title, table_name) VALUES (:sid, :title, :tbl)"),
+                            {"sid": session_id, "title": f"ชุดข้อมูล: {effective_table}", "tbl": effective_table}
+                        )
+                    conn.commit()
+            except Exception:
+                pass
+
+    if effective_table and uploaded_tables:
+        matched = [t for t in uploaded_tables if t.lower() == effective_table.lower()]
+        if matched:
+            effective_table = matched[0]
+
     # หากผู้ใช้ส่ง session_id มา แต่ห้องสนทนานี้ยังไม่ได้นำเข้าชุดข้อมูล (และไม่ใช่การขอดูข้อมูลจำลอง)
     # แจ้งเตือนผู้ใช้ทันทีเพื่อป้องกัน Data Leakage จากห้องสนทนาอื่น
     if session_id and not effective_table and not is_explicit_mock_intent:

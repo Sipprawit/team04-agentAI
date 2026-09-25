@@ -51,6 +51,22 @@ class TestChatSessions:
         sessions = list_resp.json()["sessions"]
         assert sessions[0]["title"] == "หัวข้อใหม่"
 
+    def test_update_session_upsert_when_not_exists(self):
+        """ทดสอบการเรียก PUT สำหรับ Session ที่ยังไม่เคย INSERT (Upsert)"""
+        resp = client.put("/part4/sessions/session_default", json={
+            "title": "ชุดข้อมูล: sales_data",
+            "table_name": "sales_data"
+        })
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "success"
+
+        list_resp = client.get("/part4/sessions")
+        sessions = list_resp.json()["sessions"]
+        assert len(sessions) == 1
+        assert sessions[0]["session_id"] == "session_default"
+        assert sessions[0]["title"] == "ชุดข้อมูล: sales_data"
+        assert sessions[0]["table_name"] == "sales_data"
+
     def test_delete_session(self):
         client.post("/part4/sessions", json={"session_id": "sess-delete", "title": "จะถูกลบ"})
         resp = client.delete("/part4/sessions/sess-delete")

@@ -147,6 +147,11 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
       const result = await uploadCsvFile(file, cleanTableName);
       setUploadResult(result);
 
+      // Trigger onUploadSuccess ทันทีเพื่อให้ App state และ Session ผูกกับชุดข้อมูลใหม่แบบเรียลไทม์
+      if (onUploadSuccess) {
+        onUploadSuccess(result);
+      }
+
       if (result.pii_warnings && result.pii_warnings.length > 0) {
         setPiiWarnings(result.pii_warnings);
         setMessage({
@@ -159,9 +164,8 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
           text: `นำเข้าตาราง "${result.table_name}" สำเร็จ (${result.row_count.toLocaleString()} แถว)`,
         });
         setTimeout(() => {
-          if (onUploadSuccess) onUploadSuccess(result);
           onClose();
-        }, 1200);
+        }, 1000);
       }
       setPreviewCache((prev) => {
         const next = { ...prev };
@@ -178,9 +182,6 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
   };
 
   const handleProceedWithPii = () => {
-    if (uploadResult && onUploadSuccess) {
-      onUploadSuccess(uploadResult);
-    }
     onClose();
   };
 
