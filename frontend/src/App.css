@@ -2829,6 +2829,26 @@ body {
   border-color: var(--primary-400);
 }
 
+.dataset-use-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dataset-use-btn:hover {
+  background: #d1fae5;
+  border-color: #6ee7b7;
+}
+
 .dataset-preview-drawer {
   padding: 10px 14px 14px 14px;
   border-top: 1px solid #e2e8f0;

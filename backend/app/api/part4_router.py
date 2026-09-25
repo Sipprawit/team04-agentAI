@@ -27,6 +27,7 @@ def _init_part4_tables():
             CREATE TABLE IF NOT EXISTS chat_sessions (
                 session_id TEXT PRIMARY KEY,
                 title TEXT NOT NULL DEFAULT 'การสนทนาใหม่',
+                table_name TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -50,6 +51,30 @@ def _init_part4_tables():
                 pinned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """))
+
+        # เพิ่มคอลัมน์ table_name หากยังไม่มี (Migration)
+        try:
+            conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN table_name TEXT;"))
+        except Exception:
+            pass
+
+        # Backfill table_name จากข้อความนำเข้าชุดข้อมูลเดิม (uploadData)
+        try:
+            conn.execute(text("""
+                UPDATE chat_sessions
+                SET table_name = (
+                    SELECT json_extract(metadata_json, '$.uploadData.table_name')
+                    FROM chat_messages
+                    WHERE chat_messages.session_id = chat_sessions.session_id
+                      AND metadata_json LIKE '%uploadData%'
+                    ORDER BY id DESC
+                    LIMIT 1
+                )
+                WHERE table_name IS NULL;
+            """))
+        except Exception:
+            pass
+
         # ทำความสะอาดชื่อ session เก่าที่เคยมีตัวเลขต่อท้าย หรือเป็น markdown
         try:
             conn.execute(text("""
@@ -100,11 +125,17 @@ def list_sessions():
     _init_part4_tables()
     with engine.connect() as conn:
         rows = conn.execute(text(
-            "SELECT session_id, title, created_at, updated_at FROM chat_sessions ORDER BY updated_at DESC"
+            "SELECT session_id, title, created_at, updated_at, table_name FROM chat_sessions ORDER BY updated_at DESC"
         )).fetchall()
     return {
         "sessions": [
-            {"session_id": r[0], "title": _clean_session_title(r[1]), "created_at": r[2], "updated_at": r[3]}
+            {
+                "session_id": r[0],
+                "title": _clean_session_title(r[1]),
+                "created_at": r[2],
+                "updated_at": r[3],
+                "table_name": r[4] if len(r) > 4 else None,
+            }
             for r in rows
         ]
     }
@@ -116,25 +147,37 @@ def create_session(data: Dict[str, Any] = Body(...)):
     _init_part4_tables()
     session_id = data.get("session_id", "")
     title = data.get("title", "การสนทนาใหม่")
+    table_name = data.get("table_name")
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id is required")
     with engine.connect() as conn:
         conn.execute(text(
-            "INSERT OR IGNORE INTO chat_sessions (session_id, title) VALUES (:sid, :title)"
-        ), {"sid": session_id, "title": title})
+            "INSERT OR IGNORE INTO chat_sessions (session_id, title, table_name) VALUES (:sid, :title, :tbl)"
+        ), {"sid": session_id, "title": title, "tbl": table_name})
         conn.commit()
-    return {"status": "success", "session_id": session_id}
+    return {"status": "success", "session_id": session_id, "table_name": table_name}
 
 
 @router.put("/sessions/{session_id}")
 def update_session(session_id: str, data: Dict[str, Any] = Body(...)):
-    """อัปเดตชื่อ Session"""
+    """อัปเดตชื่อ Session หรือ table_name"""
     _init_part4_tables()
-    title = data.get("title", "")
+    title = data.get("title")
+    table_name = data.get("table_name")
+    updates = []
+    params = {"sid": session_id}
+    if title is not None:
+        updates.append("title = :title")
+        params["title"] = title
+    if "table_name" in data:
+        updates.append("table_name = :tbl")
+        params["tbl"] = table_name
+    if not updates:
+        return {"status": "success"}
+    updates.append("updated_at = CURRENT_TIMESTAMP")
+    sql = f"UPDATE chat_sessions SET {', '.join(updates)} WHERE session_id = :sid"
     with engine.connect() as conn:
-        conn.execute(text(
-            "UPDATE chat_sessions SET title = :title, updated_at = CURRENT_TIMESTAMP WHERE session_id = :sid"
-        ), {"title": title, "sid": session_id})
+        conn.execute(text(sql), params)
         conn.commit()
     return {"status": "success"}
 
@@ -157,9 +200,13 @@ def delete_session(session_id: str):
 
 @router.get("/chat-history/{session_id}")
 def get_chat_history(session_id: str):
-    """ดึงประวัติการแชทแยกตาม Session"""
+    """ดึงประวัติการแชทแยกตาม Session พร้อมข้อมูลชุดข้อมูลที่ผูกไว้"""
     _init_part4_tables()
     with engine.connect() as conn:
+        session_row = conn.execute(text(
+            "SELECT title, table_name FROM chat_sessions WHERE session_id = :sid"
+        ), {"sid": session_id}).fetchone()
+
         rows = conn.execute(text(
             "SELECT id, role, content, metadata_json, created_at FROM chat_messages "
             "WHERE session_id = :sid ORDER BY id ASC"
@@ -173,27 +220,39 @@ def get_chat_history(session_id: str):
             except (json.JSONDecodeError, TypeError):
                 pass
         messages.append(msg)
-    return {"session_id": session_id, "messages": messages}
+    title = session_row[0] if session_row else "การสนทนาใหม่"
+    table_name = session_row[1] if session_row else None
+    return {
+        "session_id": session_id,
+        "title": _clean_session_title(title),
+        "table_name": table_name,
+        "messages": messages,
+    }
 
 
 @router.post("/chat-history/{session_id}")
 def save_chat_message(session_id: str, message: Dict[str, Any] = Body(...)):
-    """บันทึกข้อความลงประวัติการแชท (พร้อมสร้าง Session อัตโนมัติหากยังไม่มี)"""
+    """บันทึกข้อความลงประวัติการแชท (พร้อมสร้าง Session อัตโนมัติและผูก table_name หากมี)"""
     _init_part4_tables()
     role = message.get("role", "user")
     content = message.get("content") or message.get("text", "")
     metadata = message.get("metadata")
     metadata_json = json.dumps(metadata, ensure_ascii=False) if metadata else None
 
-    # ตั้งชื่อ Session เริ่มต้นให้สะอาด ไม่ติดข้อความ Markdown ของระบบนำเข้า
+    # ตรวจหา table_name จาก metadata หรือ content
+    detected_table = None
     if metadata and isinstance(metadata, dict) and metadata.get("uploadData"):
         upload_data = metadata.get("uploadData")
-        table_name = upload_data.get("table_name", "")
-        default_title = f"ชุดข้อมูล: {table_name}" if table_name else "ชุดข้อมูลใหม่"
+        detected_table = upload_data.get("table_name")
+        default_title = f"ชุดข้อมูล: {detected_table}" if detected_table else "ชุดข้อมูลใหม่"
     elif content.startswith("**นำเข้า"):
         import re
         m = re.search(r"`([^`]+)`", content)
-        default_title = f"ชุดข้อมูล: {m.group(1)}" if m else "ชุดข้อมูลใหม่"
+        if m:
+            detected_table = m.group(1)
+            default_title = f"ชุดข้อมูล: {detected_table}"
+        else:
+            default_title = "ชุดข้อมูลใหม่"
     elif content:
         clean_text = content.strip().lstrip("#* \t\n")
         default_title = clean_text[:30] if clean_text else "การสนทนาใหม่"
@@ -203,8 +262,14 @@ def save_chat_message(session_id: str, message: Dict[str, Any] = Body(...)):
     with engine.connect() as conn:
         # สร้าง session ถ้ายังไม่มี
         conn.execute(text(
-            "INSERT OR IGNORE INTO chat_sessions (session_id, title) VALUES (:sid, :title)"
-        ), {"sid": session_id, "title": default_title})
+            "INSERT OR IGNORE INTO chat_sessions (session_id, title, table_name) VALUES (:sid, :title, :tbl)"
+        ), {"sid": session_id, "title": default_title, "tbl": detected_table})
+
+        # หากมีชุดข้อมูลที่นำเข้า ให้บันทึก table_name ผูกกับห้องสนทนานี้
+        if detected_table:
+            conn.execute(text(
+                "UPDATE chat_sessions SET table_name = :tbl WHERE session_id = :sid AND (table_name IS NULL OR table_name = '')"
+            ), {"tbl": detected_table, "sid": session_id})
 
         # หากเป็นข้อความคำถามจาก User (role == 'user') และชื่อห้องปัจจุบันยังเป็นชื่อเริ่มต้นหรือชื่อชุดข้อมูล
         # ให้อัปเดตชื่อห้องตามคำถามของผู้ใช้โดยอัตโนมัติ
@@ -233,6 +298,7 @@ def save_chat_message(session_id: str, message: Dict[str, Any] = Body(...)):
         conn.execute(text(
             "INSERT INTO chat_messages (session_id, role, content, metadata_json) VALUES (:sid, :role, :content, :meta)"
         ), {"sid": session_id, "role": role, "content": content, "meta": metadata_json})
+
         # อัปเดต updated_at ของ session
         conn.execute(text(
             "UPDATE chat_sessions SET updated_at = CURRENT_TIMESTAMP WHERE session_id = :sid"

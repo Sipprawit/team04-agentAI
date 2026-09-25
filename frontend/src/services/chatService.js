@@ -1,10 +1,13 @@
 import api from './api';
 
-export const sendQuery = async (queryText, chatHistory = []) => {
-  const response = await api.post('/query', {
+export const sendQuery = async (queryText, chatHistory = [], sessionId = null, tableName = null) => {
+  const payload = {
     q: queryText,
     chat_history: chatHistory,
-  });
+  };
+  if (sessionId) payload.session_id = sessionId;
+  if (tableName) payload.table_name = tableName;
+  const response = await api.post('/query', payload);
   return response.data;
 };
 
@@ -13,16 +16,21 @@ export const listSessions = async () => {
   return response.data.sessions || [];
 };
 
-export const createSession = async (sessionId, title = 'การสนทนาใหม่') => {
-  const response = await api.post('/part4/sessions', {
+export const createSession = async (sessionId, title = 'การสนทนาใหม่', tableName = null) => {
+  const payload = {
     session_id: sessionId,
     title,
-  });
+  };
+  if (tableName) payload.table_name = tableName;
+  const response = await api.post('/part4/sessions', payload);
   return response.data;
 };
 
-export const updateSession = async (sessionId, title) => {
-  const response = await api.put(`/part4/sessions/${sessionId}`, { title });
+export const updateSession = async (sessionId, title = null, tableName = null) => {
+  const payload = {};
+  if (title !== null && title !== undefined) payload.title = title;
+  if (tableName !== null && tableName !== undefined) payload.table_name = tableName;
+  const response = await api.put(`/part4/sessions/${sessionId}`, payload);
   return response.data;
 };
 

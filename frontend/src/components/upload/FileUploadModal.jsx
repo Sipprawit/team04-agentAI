@@ -248,6 +248,28 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
     setActiveTab('upload');
   };
 
+  // เลือกใช้ชุดข้อมูลนี้ในห้องสนทนาปัจจุบัน
+  const handleUseDatasetInSession = async (ds) => {
+    let previewData = previewCache[ds.table_name]?.data;
+    if (!previewData) {
+      try {
+        const res = await fetchTablePreview(ds.table_name, 10);
+        previewData = res?.data || [];
+      } catch {
+        previewData = [];
+      }
+    }
+    if (onUploadSuccess) {
+      onUploadSuccess({
+        table_name: ds.table_name,
+        row_count: ds.row_count,
+        columns: ds.columns,
+        preview_data: previewData,
+      });
+    }
+    onClose?.();
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content modal-content-wide" onClick={(e) => e.stopPropagation()}>
@@ -485,6 +507,17 @@ export default function FileUploadModal({ isOpen, onClose, onUploadSuccess, onDa
                         </div>
 
                         <div className="dataset-item-actions" onClick={(e) => e.stopPropagation()}>
+                          {/* Select dataset for this chat session */}
+                          <button
+                            type="button"
+                            className="dataset-use-btn"
+                            onClick={() => handleUseDatasetInSession(ds)}
+                            title={`เลือกใช้ชุดข้อมูล ${ds.table_name} ในห้องสนทนานี้`}
+                          >
+                            <CheckCircle2 size={12} />
+                            <span>เลือกใช้ในห้องนี้</span>
+                          </button>
+
                           {/* Re-upload / Overwrite button */}
                           <button
                             type="button"

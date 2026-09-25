@@ -114,6 +114,8 @@ class ChatMessageModel(BaseModel):
 class QueryRequestModel(BaseModel):
     q: str
     chat_history: Optional[List[Dict[str, Any]]] = []
+    session_id: Optional[str] = None
+    table_name: Optional[str] = None
 
 
 def _generate_follow_up_questions(user_query: str, sql_query: str, raw_data: list = None) -> list:
@@ -279,10 +281,16 @@ def explain_sql_query(sql_query: str) -> str:
     return f"{' และ '.join(desc_parts)} จากตาราง '{tbl_name}'"
 
 
-def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
+def _run_query_pipeline(
+    user_query: str,
+    chat_history: list = None,
+    session_id: str = None,
+    table_name: str = None
+) -> dict:
     """
     ฟังก์ชันแกนกลางประมวลผล Pipeline:
     คำถามภาษาคน -> แปลง SQL -> ตรวจ Security -> รันใน Sandbox (Agentic self-heal loop) -> สรุป Insight & สร้าง Visualization
+    รองรับ Session Isolation เพื่อป้องกันไม่ให้คำถามในห้องใหม่ไปดึงข้อมูลจากชุดข้อมูลของห้องสนทนาเดิม
     """
     if not user_query or not user_query.strip():
         return {
@@ -323,44 +331,78 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
     if any(p in user_query.lower() for p in out_of_scope_patterns):
         return _create_out_of_scope_response(user_query)
 
-    # ตรวจสอบสถานะชุดข้อมูล: หากยังไม่มีการอัปโหลดไฟล์ CSV เข้ามาในระบบ
-    uploaded_tables = get_uploaded_tables()
-    if not uploaded_tables:
-        # อนุญาตเฉพาะเมื่อผู้ใช้ระบุคำว่า "mock" หรือ "จำลอง" โดยตรงเท่านั้น
-        # ห้ามใช้คำทั่วไปอย่าง "สินค้า", "ลูกค้า", "คำสั่งซื้อ" เพราะผู้ใช้อาจตั้งใจถามถึงไฟล์จริงของตนเอง
-        q_lower = user_query.lower()
-        mock_intent_keywords = [
-            "mock", "ข้อมูลจำลอง", "ชุดข้อมูลจำลอง", "ข้อมูลตัวอย่าง", "ทดสอบระบบจำลอง"
-        ]
-        is_explicit_mock_intent = any(kw in q_lower for kw in mock_intent_keywords)
+    # ตรวจหาชุดข้อมูล (table_name) ที่ผูกไว้กับ Session นี้โดยเฉพาะ
+    effective_table = table_name
+    if not effective_table and session_id:
+        try:
+            from app.db.database import engine
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text("SELECT table_name FROM chat_sessions WHERE session_id = :sid"),
+                    {"sid": session_id}
+                ).fetchone()
+                if row and row[0]:
+                    effective_table = row[0]
+        except Exception:
+            pass
 
-        if not is_explicit_mock_intent:
-            return {
-                "query": user_query,
-                "sql": "",
-                "response": (
-                    "ขณะนี้ยังไม่มีชุดข้อมูลหรือไฟล์ที่ถูกนำเข้าในระบบครับ\n\n"
-                    "💡 **คำแนะนำ**: กรุณาคลิกปุ่ม **`+`** ด้านล่างกล่องข้อความเพื่อนำเข้าไฟล์ CSV ของคุณ "
-                    "(เช่น ข้อมูลงบประมาณ, ข้อมูลการเงิน, ข้อมูลสถานที่ท่องเที่ยว/ร้านอาหาร หรือชุดข้อมูลอื่นๆ ที่ต้องการวิเคราะห์) "
-                    "เพื่อเริ่มต้นการค้นหาและสร้างแผนภูมิรายงานได้ทันทีครับ"
-                ),
-                "visualization": None,
-                "data": [],
-                "follow_up_questions": [
-                    "นำเข้าไฟล์ CSV เพื่อเริ่มวิเคราะห์ (+)",
-                ],
-            }
+    # ตรวจสอบเจตนาคำถามเกี่ยวกับชุดข้อมูลจำลอง (Mock Intent)
+    q_lower = user_query.lower()
+    mock_intent_keywords = [
+        "mock", "ข้อมูลจำลอง", "ชุดข้อมูลจำลอง", "ข้อมูลตัวอย่าง", "ทดสอบระบบจำลอง"
+    ]
+    is_explicit_mock_intent = any(kw in q_lower for kw in mock_intent_keywords)
+
+    uploaded_tables = get_uploaded_tables()
+
+    # หากผู้ใช้ส่ง session_id มา แต่ห้องสนทนานี้ยังไม่ได้นำเข้าชุดข้อมูล (และไม่ใช่การขอดูข้อมูลจำลอง)
+    # แจ้งเตือนผู้ใช้ทันทีเพื่อป้องกัน Data Leakage จากห้องสนทนาอื่น
+    if session_id and not effective_table and not is_explicit_mock_intent:
+        return {
+            "query": user_query,
+            "sql": "",
+            "response": (
+                "ห้องสนทนานี้ยังไม่ได้นำเข้าชุดข้อมูลครับ\n\n"
+                "💡 **คำแนะนำ**: กรุณาคลิกปุ่ม **`+`** ด้านล่างกล่องข้อความเพื่อนำเข้าไฟล์ CSV ของคุณ "
+                "หรือเลือกชุดข้อมูลสำหรับห้องสนทนานี้ เพื่อเริ่มต้นการค้นหาและสร้างแผนภูมิรายงานครับ"
+            ),
+            "visualization": None,
+            "data": [],
+            "follow_up_questions": [
+                "นำเข้าไฟล์ CSV เพื่อเริ่มวิเคราะห์ (+)",
+            ],
+        }
+
+    # กรณีทั่วไป (เช่น ไม่ได้ระบุ session_id) หากยังไม่มีการอัปโหลดไฟล์ใดๆ และไม่ใช่ mock
+    if not uploaded_tables and not is_explicit_mock_intent and not effective_table:
+        return {
+            "query": user_query,
+            "sql": "",
+            "response": (
+                "ขณะนี้ยังไม่มีชุดข้อมูลหรือไฟล์ที่ถูกนำเข้าในระบบครับ\n\n"
+                "💡 **คำแนะนำ**: กรุณาคลิกปุ่ม **`+`** ด้านล่างกล่องข้อความเพื่อนำเข้าไฟล์ CSV ของคุณ "
+                "(เช่น ข้อมูลงบประมาณ, ข้อมูลการเงิน, ข้อมูลสถานที่ท่องเที่ยว/ร้านอาหาร หรือชุดข้อมูลอื่นๆ ที่ต้องการวิเคราะห์) "
+                "เพื่อเริ่มต้นการค้นหาและสร้างแผนภูมิรายงานได้ทันทีครับ"
+            ),
+            "visualization": None,
+            "data": [],
+            "follow_up_questions": [
+                "นำเข้าไฟล์ CSV เพื่อเริ่มวิเคราะห์ (+)",
+            ],
+        }
 
     # ตรวจสอบ In-Memory Query Cache ก่อนเรียก LLM
-    cache_key = _get_cache_key(user_query, uploaded_tables)
+    active_tables = [effective_table] if effective_table else uploaded_tables
+    cache_key = _get_cache_key(user_query, active_tables)
     cached_payload = _get_cached_result(cache_key)
     if cached_payload:
         logger.info(f"Query Cache HIT for: '{user_query}'")
         return cached_payload
 
-    # 1. แปลงคำถามเป็น SQL (Part 2)
+    # 1. แปลงคำถามเป็น SQL (Part 2) พร้อมส่ง target_table เพื่อป้องกัน Data Leakage
     try:
-        sql_query = translate_nl_to_sql(user_query, history)
+        sql_query = translate_nl_to_sql(user_query, history, target_table=effective_table)
     except Exception as e:
         logger.error(f"Translation failed: {e}")
         friendly_err = _format_user_friendly_error(str(e), user_query)
@@ -380,7 +422,7 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
     if sql_query.startswith("[OUT_OF_SCOPE]") or (not sql_query.upper().startswith("SELECT") and not sql_query.upper().startswith("WITH")):
         return _create_out_of_scope_response(user_query)
 
-    schema_info = get_database_schema_info()
+    schema_info = get_database_schema_info(relevant_query=user_query, target_table=effective_table)
     max_retries = 2
     sandbox_result = None
     last_error = ""
@@ -512,16 +554,29 @@ def _run_query_pipeline(user_query: str, chat_history: list = None) -> dict:
 @router.post("")
 def query_post(request: QueryRequestModel):
     """
-    Endpoint POST รับคำถามและประวัติการสนทนา (รองรับ Multi-turn context)
+    Endpoint POST รับคำถามและประวัติการสนทนา (รองรับ Multi-turn context และ Session Isolation)
     ใช้ sync def เพื่อให้ FastAPI ส่งเข้า Threadpool อัตโนมัติ (ไม่บล็อก Event Loop)
     """
-    return _run_query_pipeline(request.q, request.chat_history)
+    return _run_query_pipeline(
+        user_query=request.q,
+        chat_history=request.chat_history,
+        session_id=request.session_id,
+        table_name=request.table_name
+    )
 
 
 @router.get("")
-def query_get(q: str = Query(..., description="คำถามภาษาไทยสำหรับถาม AI")):
+def query_get(
+    q: str = Query(..., description="คำถามภาษาไทยสำหรับถาม AI"),
+    session_id: Optional[str] = Query(None, description="Session ID ของห้องสนทนา"),
+    table_name: Optional[str] = Query(None, description="ชื่อตารางข้อมูลเฉพาะ")
+):
     """
     Endpoint GET สำหรับเรียกถามแบบรวดเร็วผ่าน Browser หรือ Query Parameter
     ใช้ sync def เพื่อให้ FastAPI ส่งเข้า Threadpool อัตโนมัติ (ไม่บล็อก Event Loop)
     """
-    return _run_query_pipeline(q)
+    return _run_query_pipeline(
+        user_query=q,
+        session_id=session_id,
+        table_name=table_name
+    )

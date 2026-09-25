@@ -1,12 +1,13 @@
 from app.part1_data_security.integration.schema_inspector import get_database_schema_info
 
 
-def build_sql_prompt(user_query: str, chat_history: list = None) -> str:
+def build_sql_prompt(user_query: str, chat_history: list = None, target_table: str = None) -> str:
     """
     สร้าง Prompt สำหรับแปลงภาษาธรรมชาติเป็น SQL
     รวมทั้งคำถาม, โครงสร้างตาราง (Schema) และประวัติการสนทนา
+    หากระบุ target_table จะจำกัด Schema เฉพาะตารางนั้นเพื่อป้องกัน Data Leakage ข้าม Session
     """
-    schema = get_database_schema_info(relevant_query=user_query)
+    schema = get_database_schema_info(relevant_query=user_query, target_table=target_table)
 
     history_lines = []
     if chat_history:
@@ -24,9 +25,12 @@ def build_sql_prompt(user_query: str, chat_history: list = None) -> str:
     if history_lines:
         history_str = "\nประวัติการสนทนาก่อนหน้า:\n" + "\n".join(history_lines)
 
+    target_clause = f'\n⚠️ ข้อกำหนดสำคัญ: คำถามนี้ผูกกับตาราง "{target_table}" เท่านั้น ให้สร้างคำสั่ง SQL โดยสืบค้นจากตาราง "{target_table}" เป็นหลัก\n' if target_table else ""
+
     prompt = f"""คุณคือผู้เชี่ยวชาญด้าน SQLite Database ขั้นสูง
 นี่คือโครงสร้างตารางและความสัมพันธ์ในฐานข้อมูลปัจจุบัน:
 {schema}
+{target_clause}
 {history_str}
 
 คำถามจากผู้ใช้: "{user_query}"

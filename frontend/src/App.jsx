@@ -260,7 +260,8 @@ export default function App() {
             const rawTitle = s.title || 'การสนทนา';
             return {
               id: s.session_id,
-              title: /^การสนทนาใหม่(\s*\d+)?$/.test(rawTitle) ? 'การสนทนาใหม่' : rawTitle
+              title: /^การสนทนาใหม่(\s*\d+)?$/.test(rawTitle) ? 'การสนทนาใหม่' : rawTitle,
+              tableName: s.table_name || null
             };
           });
           setSessions(formatted);
@@ -336,6 +337,10 @@ export default function App() {
           ...prev,
           [sessionId]: loadedMessages
         }));
+
+        if (historyData?.table_name) {
+          setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, tableName: historyData.table_name } : s));
+        }
 
         // อัปเดต activeMessage ให้ตรงกับข้อความ AI ล่าสุดของห้องนี้
         const lastAi = [...loadedMessages].reverse().find(
@@ -510,7 +515,10 @@ export default function App() {
         text: m.text
       }));
 
-      const data = await sendQuery(userMessage.text, historyContext);
+      const targetSession = sessions.find(s => s.id === targetSessionId);
+      const sessionTableName = targetSession?.tableName || null;
+
+      const data = await sendQuery(userMessage.text, historyContext, targetSessionId, sessionTableName);
 
       const aiMessage = {
         id: `ai_${Date.now()}`,
@@ -669,11 +677,12 @@ export default function App() {
     const newTitle = 'การสนทนาใหม่';
     const newSession = {
       id: newId,
-      title: newTitle
+      title: newTitle,
+      tableName: null
     };
 
     try {
-      await createSession(newId, newTitle);
+      await createSession(newId, newTitle, null);
     } catch (err) {
       console.warn('Could not sync new session to backend SQLite:', err);
     }
@@ -787,22 +796,23 @@ export default function App() {
       [activeSession]: [...(prev[activeSession] || []), uploadAiMsg]
     }));
 
-    // ตั้งชื่อห้องแชทให้ตรงกับชุดข้อมูลที่นำเข้า (หากยังเป็นห้องว่าง/การสนทนาใหม่)
+    // ตั้งชื่อห้องแชทให้ตรงกับชุดข้อมูลที่นำเข้า (หากยังเป็นห้องว่าง/การสนทนาใหม่) และผูก tableName กับ session
     const datasetTitle = `ชุดข้อมูล: ${res.table_name}`;
     let shouldUpdateUploadTitle = false;
     setSessions(prev => prev.map(s => {
-      if (s.id === activeSession && (
-        s.title.startsWith('การสนทนาใหม่') ||
-        s.title === 'การวิเคราะห์ข้อมูลและสถิติ'
-      )) {
-        shouldUpdateUploadTitle = true;
-        return { ...s, title: datasetTitle };
+      if (s.id === activeSession) {
+        if (
+          s.title.startsWith('การสนทนาใหม่') ||
+          s.title === 'การวิเคราะห์ข้อมูลและสถิติ'
+        ) {
+          shouldUpdateUploadTitle = true;
+          return { ...s, title: datasetTitle, tableName: res.table_name };
+        }
+        return { ...s, tableName: res.table_name };
       }
       return s;
     }));
-    if (shouldUpdateUploadTitle) {
-      updateSession(activeSession, datasetTitle).catch(() => {});
-    }
+    updateSession(activeSession, shouldUpdateUploadTitle ? datasetTitle : null, res.table_name).catch(() => {});
 
     // Persist to SQLite
     saveChatMessage(activeSession, {
@@ -851,6 +861,7 @@ export default function App() {
 
   // Handle dataset table deleted from modal
   const handleDatasetDeleted = (deletedTableName) => {
+    setSessions(prev => prev.map(s => s.tableName === deletedTableName ? { ...s, tableName: null } : s));
     setToast({
       type: 'info',
       title: 'ลบชุดข้อมูลสำเร็จ',

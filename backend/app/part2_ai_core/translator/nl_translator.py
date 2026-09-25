@@ -79,14 +79,14 @@ def clean_extracted_sql(text_input: str) -> str:
     return cleaned.strip()
 
 
-def translate_nl_to_sql(user_query: str, chat_history: list = None) -> str:
+def translate_nl_to_sql(user_query: str, chat_history: list = None, target_table: str = None) -> str:
     """
     ระบบแปลงภาษาธรรมชาติเป็นชุดคำสั่ง SQL (NL to SQL Translator System)
-    พร้อม Error handling
+    พร้อม Error handling และป้องกันปัญหาตารางข้อมูลปนกันข้าม Session (Session Isolation)
     """
     try:
         llm = get_llm()
-        prompt = build_sql_prompt(user_query, chat_history)
+        prompt = build_sql_prompt(user_query, chat_history, target_table=target_table)
 
         system_msg = SystemMessage(
             content="You are an expert SQLite Database Engineer. Output ONLY the executable SQL query directly. "

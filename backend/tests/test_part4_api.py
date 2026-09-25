@@ -178,3 +178,59 @@ class TestHealthAndProduction:
             resp = client.get("/health")
             assert resp.status_code == 200
 
+
+class TestSessionDatasetIsolation:
+    """ทดสอบการผูกชุดข้อมูลกับห้องสนทนา และการป้องกันการดึงข้อมูลข้าม Session (Session Isolation)"""
+
+    def test_session_table_name_lifecycle(self):
+        # สร้าง session พร้อมผูก table_name
+        resp = client.post("/part4/sessions", json={
+            "session_id": "sess-dataset-1",
+            "title": "การวิเคราะห์งบประมาณ",
+            "table_name": "budget_2567"
+        })
+        assert resp.status_code == 200
+        assert resp.json()["table_name"] == "budget_2567"
+
+        # ตรวจสอบว่า list_sessions มี table_name
+        list_resp = client.get("/part4/sessions")
+        s = next(x for x in list_resp.json()["sessions"] if x["session_id"] == "sess-dataset-1")
+        assert s["table_name"] == "budget_2567"
+
+        # ตรวจสอบว่า get_chat_history มี table_name
+        hist_resp = client.get("/part4/chat-history/sess-dataset-1")
+        assert hist_resp.json()["table_name"] == "budget_2567"
+
+        # อัปเดต table_name
+        put_resp = client.put("/part4/sessions/sess-dataset-1", json={"table_name": "budget_2568"})
+        assert put_resp.status_code == 200
+
+        hist_resp2 = client.get("/part4/chat-history/sess-dataset-1")
+        assert hist_resp2.json()["table_name"] == "budget_2568"
+
+    def test_save_chat_message_auto_binds_table_name(self):
+        # เมื่อมีการส่งข้อความนำเข้าชุดข้อมูล ให้ auto bind table_name กับ session
+        client.post("/part4/chat-history/sess-auto", json={
+            "role": "assistant",
+            "content": "**นำเข้าชุดข้อมูลเข้าสู่ตาราง `my_custom_table` เรียบร้อยแล้ว**",
+            "metadata": {"uploadData": {"table_name": "my_custom_table"}}
+        })
+
+        hist_resp = client.get("/part4/chat-history/sess-auto")
+        assert hist_resp.json()["table_name"] == "my_custom_table"
+
+    def test_query_in_new_session_without_dataset_is_blocked(self):
+        # สร้าง session เปล่าที่ไม่มีการอัปโหลดไฟล์
+        client.post("/part4/sessions", json={"session_id": "sess-empty", "title": "แชทใหม่"})
+
+        # ถามคำถามทั่วไปใน session นี้
+        resp = client.post("/query", json={
+            "q": "ขอข้อมูลโครงการที่มีงบสูงสุด",
+            "session_id": "sess-empty"
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "ห้องสนทนานี้ยังไม่ได้นำเข้าชุดข้อมูลครับ" in data["response"]
+        assert data["sql"] == ""
+
+

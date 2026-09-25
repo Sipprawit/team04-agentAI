@@ -51,15 +51,24 @@ def _score_table_relevance(table_name: str, col_names: list, query: str) -> int:
     return score
 
 
-def get_database_schema_info(exclude_system_tables: bool = True, relevant_query: str = None) -> str:
+def get_database_schema_info(exclude_system_tables: bool = True, relevant_query: str = None, target_table: str = None) -> str:
     """
     อ่านและบันทึกโครงสร้างข้อมูล (Schema Mapping System)
     จัดลำดับตารางที่ผู้ใช้อัปโหลดเข้ามา (Uploaded Tables) ขึ้นก่อนตารางจำลอง (Mock Tables)
     และจัดลำดับตารางที่เกี่ยวข้องกับคำถามมากที่สุด (Schema-aware Relevance Ranking) ไว้บนสุด
+    หากระบุ target_table จะดึงเฉพาะตารางนั้น เพื่อป้องกันปัญหาข้อมูลปนกันข้าม Session (Session Isolation)
     """
     try:
         inspector = inspect(engine)
         tables = inspector.get_table_names()
+
+        if target_table:
+            # ค้นหาตารางที่ตรงกับ target_table (แบบ case-insensitive)
+            matched = [t for t in tables if t.lower() == target_table.lower()]
+            if matched:
+                tables = matched
+            else:
+                return f"No table named '{target_table}' found in database."
 
         uploaded_items = []
         mock_items = []
