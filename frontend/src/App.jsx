@@ -916,7 +916,6 @@ export default function App() {
         onSelectSession={handleSelectSession}
         onNewChat={handleNewChat}
         onDeleteSession={handleDeleteSession}
-        onOpenIntro={() => setShowIntro(true)}
         user={user}
       />
 

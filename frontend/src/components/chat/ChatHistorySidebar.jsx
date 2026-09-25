@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, MessageSquare, Trash2, Bot, PanelLeftClose, PanelLeftOpen, Sparkles } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, Bot, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 export default function ChatHistorySidebar({
   isOpen,
@@ -9,7 +9,6 @@ export default function ChatHistorySidebar({
   onSelectSession,
   onNewChat,
   onDeleteSession,
-  onOpenIntro,
   _user
 }) {
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, sessionId: null });
@@ -51,11 +50,6 @@ export default function ChatHistorySidebar({
         <button onClick={onNewChat} className="sidebar-collapsed-new-btn" title="เริ่มสนทนาใหม่">
           <Plus size={18} />
         </button>
-        {onOpenIntro && (
-          <button onClick={onOpenIntro} className="sidebar-collapsed-new-btn sidebar-collapsed-intro-btn" title="หน้าแรกและคู่มือแนะนำระบบ">
-            <Sparkles size={16} className="text-amber-400" />
-          </button>
-        )}
       </aside>
     );
   }
@@ -77,18 +71,12 @@ export default function ChatHistorySidebar({
         </button>
       </div>
 
-      {/* Action Buttons: New Chat & Intro Guide */}
+      {/* Action Buttons: New Chat */}
       <div className="sidebar-action-container">
         <button onClick={onNewChat} className="new-chat-btn">
           <Plus size={16} />
           <span>เริ่มสนทนาใหม่</span>
         </button>
-        {onOpenIntro && (
-          <button onClick={onOpenIntro} className="intro-guide-toggle-btn" title="ดูหน้าแรกและคำแนะนำการใช้งานระบบ (Intro)">
-            <Sparkles size={14} className="text-amber-400" />
-            <span>แนะนำระบบ (Intro)</span>
-          </button>
-        )}
       </div>
 
       {/* Sessions / Conversation History */}
