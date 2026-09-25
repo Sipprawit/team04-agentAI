@@ -72,26 +72,109 @@ def _find_columns(data: list) -> tuple:
 
 
 def _pick_primary_metric(metric_keys: list) -> str:
-
-    """เลือกคอลัมน์ metric หลักโดยจัดลำดับความสำคัญ (มูลค่า/ยอดรวม > ราคา > ปริมาณ/จำนวน > สัดส่วน)"""
+    """เลือกคอลัมน์ metric หลักโดยจัดลำดับความสำคัญ (มูลค่า/ผลผลิต/ยอดรวม > ราคา > ปริมาณ/จำนวน > สัดส่วน)"""
     if not metric_keys:
         return ""
     priority_ranks = [
-        # Rank 1: ยอดรวม / มูลค่า / Total Value / Total Amount
-        {"value", "total", "amount", "sales", "มูลค่า", "ยอด", "งบประมาณ", "รายได้", "รายจ่าย"},
+        # Rank 1: ผลผลิต / มูลค่า / ยอดรวม / Total Value / Total Amount / Output
+        {"value", "total", "amount", "sales", "revenue", "มูลค่า", "ยอด", "ผลผลิต", "production", "output", "ยอดผลิต", "งบประมาณ", "รายได้", "รายจ่าย"},
         # Rank 2: ราคา / Price / ต้นทุน
         {"price", "cost", "ราคา"},
-        # Rank 3: ปริมาณ / Quantity / Count / จำนวน
-        {"quantity", "count", "volume", "จำนวน", "ปริมาณ", "รายการ"},
-        # Rank 4: สัดส่วน / ร้อยละ / Percentage
-        {"สัดส่วน", "ร้อยละ", "percent", "share", "ratio", "proportion"},
+        # Rank 3: ปริมาณ / Quantity / Count / จำนวน / เนื้อที่ / พื้นที่
+        {"quantity", "count", "volume", "จำนวน", "ปริมาณ", "รายการ", "เนื้อที่", "พื้นที่", "area"},
+        # Rank 4: สัดส่วน / ร้อยละ / Percentage / อัตรา / เฉลี่ย
+        {"สัดส่วน", "ร้อยละ", "percent", "share", "ratio", "proportion", "ต่อไร่", "เฉลี่ย", "rate"},
     ]
     for rank_set in priority_ranks:
         for mk in metric_keys:
             mk_lower = mk.lower()
             if mk_lower in rank_set or any(p in mk_lower for p in rank_set):
+                # ยกเว้นกรณีที่เป็น 'ผลผลิตต่อไร่' ซึ่งควรอยู่ Rank 4 (อัตราส่วน) ไม่ใช่ Rank 1 (ผลผลิตรวม)
+                if "ต่อ" in mk_lower and any(r in mk_lower for r in ["ผลผลิต", "ยอด", "มูลค่า"]):
+                    continue
                 return mk
     return metric_keys[0]
+
+
+def _pick_primary_dimension(data: list, dimension_keys: list) -> str:
+    """
+    เลือกคอลัมน์สำหรับแกน X (Dimension) ที่ฉลาดที่สุด โดยพิจารณาจาก:
+    1. ความหลากหลายของข้อมูล (Variance/Uniqueness): หลีกเลี่ยงคอลัมน์ที่เป็นค่าคงที่ซ้ำกันทุกแถว (เช่น 'ทุเรียน' ทุกแถว, 'ภาคกลาง' ทุกแถว, หรือ '2557' ทุกแถว)
+    2. ความหมายของคอลัมน์ (Semantic Importance): ให้ความสำคัญกับคอลัมน์ชื่อเฉพาะ เช่น จังหวัด, อำเภอ, ชื่อ, หมวดหมู่, สาขา, สินค้า
+    3. ไม่เลือกคอลัมน์ ID, รหัส, หรือ ลำดับที่
+    """
+    if not dimension_keys:
+        return ""
+    if not data:
+        return dimension_keys[0]
+
+    num_rows = len(data)
+
+    priority_keywords = [
+        # Rank 1: สถานที่ / หน่วยงาน / บุคคล / ผู้ใช้งาน (Entity Level)
+        {"จังหวัด", "province", "อำเภอ", "district", "ตำบล", "เมือง", "city", "ประเทศ", "country", "สาขา", "branch", "หน่วยงาน", "องค์กร"},
+        # Rank 2: ชื่อ / รายการ / สินค้า / หมวดหมู่
+        {"ชื่อ", "name", "สินค้า", "product", "หมวด", "หมวดหมู่", "category", "ประเภท", "type", "พืช", "crop", "กลุ่ม", "group"},
+        # Rank 3: ช่วงเวลา / ไตรมาส / เดือน / ปี (กรณีมีหลายช่วงเวลา)
+        {"เดือน", "month", "ปี", "year", "ไตรมาส", "quarter", "วันที่", "date", "สัปดาห์", "week"}
+    ]
+
+    scored_candidates = []
+
+    for k in dimension_keys:
+        k_lower = k.lower().strip()
+
+        # เก็บค่าที่ไม่เป็นค่าว่าง
+        vals = [str(row.get(k)).strip() for row in data if row.get(k) is not None and str(row.get(k)).strip() != ""]
+        unique_vals = set(vals)
+        n_unique = len(unique_vals)
+
+        # 1. เช็คว่าเป็น ID หรือไม่
+        is_id = any(p in k_lower for p in ["id", "_id", "code", "รหัส", "ลำดับ", "เลขที่"])
+
+        # 2. เช็คว่าเป็นค่าคงที่ (Constant / Zero Variance) หรือไม่
+        # ถ้ามีข้อมูลมากกว่า 1 แถว แต่ค่าในคอลัมน์นี้เหมือนกันหมดทุกแถว (n_unique <= 1)
+        # แสดงว่าเป็นค่าฟิลเตอร์คงที่ (เช่น 'ทุเรียน', 'ภาคกลาง', '2557') ห้ามนำมาเป็นแกน X
+        is_constant = (num_rows > 1 and n_unique <= 1)
+
+        # 3. คะแนน Semantic Priority
+        semantic_rank = 99
+        for rank_idx, rank_set in enumerate(priority_keywords):
+            if any(p in k_lower for p in rank_set):
+                semantic_rank = rank_idx
+                break
+
+        # คำนวณ Score รวม (ยิ่งสูงยิ่งดี)
+        score = 0
+        if is_constant:
+            score -= 1000
+        else:
+            # ความหลากหลายของค่า (ยิ่งกระจายตัวหลากหลายยิ่งดีสำหรับแกน X)
+            score += min(n_unique, 30) * 10
+
+        if is_id:
+            score -= 500
+
+        # Semantic bonus
+        if semantic_rank == 0:
+            score += 200  # สถานที่/จังหวัด/สาขา
+        elif semantic_rank == 1:
+            score += 100  # สินค้า/หมวดหมู่
+        elif semantic_rank == 2:
+            score += 50   # วันที่/เวลา
+
+        scored_candidates.append({
+            "key": k,
+            "score": score,
+            "n_unique": n_unique,
+            "is_constant": is_constant,
+            "semantic_rank": semantic_rank
+        })
+
+    # เรียงตามคะแนนจากมากไปน้อย
+    scored_candidates.sort(key=lambda x: x["score"], reverse=True)
+
+    return scored_candidates[0]["key"]
 
 
 def format_visualization_payload(data: list, sql_query: Optional[str] = None) -> dict:
@@ -135,14 +218,9 @@ def format_visualization_payload(data: list, sql_query: Optional[str] = None) ->
     if not clean_dim_keys:
         clean_dim_keys = dimension_keys if dimension_keys else [k for k in first_row.keys() if k not in metric_keys]
 
-    # หากมีคอลัมน์หมวดหมู่/ข้อความ ให้เลือกหมวดหมู่ก่อนคอลัมน์วันที่/เวลา เพื่อให้ได้กราฟแจกแจงที่สื่อความหมาย
-    categorical_dim_keys = [
-        k for k in clean_dim_keys
-        if not any(p in k.lower() for p in ["month", "year", "date", "เวลา", "วันที่", "เดือน", "ปี", "ไตรมาส", "quarter"])
-    ]
-    if categorical_dim_keys:
-        x_axis_key = categorical_dim_keys[0]
-    else:
+    # คัดเลือกคอลัมน์แกน X ที่เหมาะสมที่สุดโดยใช้ _pick_primary_dimension (คำนึงถึง variance และ semantic)
+    x_axis_key = _pick_primary_dimension(data, clean_dim_keys)
+    if not x_axis_key:
         x_axis_key = clean_dim_keys[0] if clean_dim_keys else list(first_row.keys())[0]
 
 
@@ -206,7 +284,7 @@ def format_visualization_payload(data: list, sql_query: Optional[str] = None) ->
                     logger.warning(f"Failed to execute chart full aggregation: {e}")
                     data_for_chart = data
 
-    chart_type = recommend_chart_type(data_for_chart)
+    chart_type = recommend_chart_type(data_for_chart, x_axis_key=x_axis_key)
 
     if not data_for_chart or chart_type in ["none"]:
         res = {
@@ -230,12 +308,10 @@ def format_visualization_payload(data: list, sql_query: Optional[str] = None) ->
         ]
         if not clean_chart_dim:
             clean_chart_dim = [k for k in chart_dim_keys if not k.lower().endswith("id") and k.lower() != "id"]
-        if clean_chart_dim:
-            cat_keys = [
-                k for k in clean_chart_dim
-                if not any(p in k.lower() for p in ["month", "year", "date", "เวลา", "วันที่", "เดือน", "ปี", "ไตรมาส", "quarter"])
-            ]
-            x_axis_key = cat_keys[0] if cat_keys else clean_chart_dim[0]
+        chosen_chart_dim = clean_chart_dim if clean_chart_dim else chart_dim_keys
+        x_axis_key = _pick_primary_dimension(data_for_chart, chosen_chart_dim)
+        if not x_axis_key:
+            x_axis_key = chosen_chart_dim[0]
     if chart_metric_keys:
         primary_y_key = _pick_primary_metric(chart_metric_keys)
 
@@ -286,6 +362,9 @@ def format_visualization_payload(data: list, sql_query: Optional[str] = None) ->
         for extra_key in ["unit", "period_of_inv", "cate_of_busi", "year"]:
             if extra_key in row:
                 entry[extra_key] = row[extra_key]
+        for k, v in row.items():
+            if k not in entry:
+                entry[k] = v
 
         chart_data.append(entry)
 

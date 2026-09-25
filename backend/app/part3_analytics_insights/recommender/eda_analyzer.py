@@ -86,13 +86,13 @@ def _get_metric_columns(data: list) -> list:
     return metric_cols
 
 
-def recommend_chart_type(data: list) -> str:
+def recommend_chart_type(data: list, x_axis_key: str = None) -> str:
     """
     ระบบแนะนำการแสดงผลกราฟอัตโนมัติ (Auto-EDA System) ที่ฉลาดและแม่นยำ:
     - 'none': หากไม่มีคอลัมน์ตัวเลขเชิงปริมาณ (เช่น รายชื่อสินค้า, ตารางสรุปข้อความ, ข้อมูลเชิงคุณภาพ)
               ป้องกันการนำ ID หรือ ปี มาสร้างกราฟมั่ว
     - 'summary_card': หากมีแถวเดียวที่เป็นตัวเลขสรุป
-    - 'line': หากมีคอลัมน์วันที่/เวลา/ปี + ตัวเลขสถิติต่อเนื่อง
+    - 'line': หากมีคอลัมน์วันที่/เวลา/ปี + ตัวเลขสถิติต่อเนื่อง (และต้องมีค่าเวลาที่หลากหลาย n_unique > 1)
     - 'pie': หากเป็นข้อมูลสัดส่วน/ร้อยละ หรือส่วนแบ่ง 3-8 หมวดหมู่
     - 'bar': หากเป็นการเปรียบเทียบหมวดหมู่ 2-25 รายการ
     """
@@ -112,13 +112,32 @@ def recommend_chart_type(data: list) -> str:
         return "summary_card"
 
     # ตรวจสอบว่ามีคอลัมน์วันที่/เวลา/ปี สำหรับแกน X หรือไม่
-    has_date = any(
-        'date' in k.lower() or 'time' in k.lower() or 'month' in k.lower() or 'year' in k.lower() or 'day' in k.lower()
-        or 'วันที่' in k or 'เดือน' in k or 'ปี' in k or 'เวลา' in k or 'พ.ศ.' in k or 'ค.ศ.' in k
-        for k in keys
-    )
-    if has_date:
-        return "line"
+    date_col_candidates = [
+        k for k in keys
+        if any(p in k.lower() for p in ['date', 'time', 'month', 'year', 'day'])
+        or any(p in k for p in ['วันที่', 'เดือน', 'ปี', 'เวลา', 'พ.ศ.', 'ค.ศ.'])
+    ]
+
+    # มิติเวลาที่จะแนะนำ line chart ได้ ต้องมีค่าที่เปลี่ยนแปลงมากกว่า 1 ค่า (n_unique > 1)
+    # หากค่าของเวลาเป็นค่าคงที่ซ้ำกันทุกแถว (เช่น มีฟิลเตอร์ปี = 2557 ทุกแถว) จะไม่ถือเป็น Time Series
+    varying_date_col = None
+    for dc in date_col_candidates:
+        unique_dates = {str(row.get(dc)).strip() for row in data if row.get(dc) is not None and str(row.get(dc)).strip() != ""}
+        if len(unique_dates) > 1:
+            varying_date_col = dc
+            break
+
+    # ตรวจสอบการเลือก Line Chart
+    if x_axis_key:
+        is_x_date = (
+            any(p in x_axis_key.lower() for p in ['date', 'time', 'month', 'year', 'day'])
+            or any(p in x_axis_key for p in ['วันที่', 'เดือน', 'ปี', 'เวลา', 'พ.ศ.', 'ค.ศ.'])
+        )
+        if is_x_date and varying_date_col == x_axis_key:
+            return "line"
+    else:
+        if varying_date_col:
+            return "line"
 
     # ตรวจสอบถ้ามีคำว่า share, percentage, proportion, ratio, ร้อยละ, สัดส่วน -> แนะนำ Pie chart
     has_percentage = any(
@@ -134,3 +153,4 @@ def recommend_chart_type(data: list) -> str:
         return "bar"
 
     return "none"
+
