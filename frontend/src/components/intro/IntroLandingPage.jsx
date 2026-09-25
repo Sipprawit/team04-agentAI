@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  Sparkles,
   ArrowRight,
   FileSpreadsheet,
   Bot,
@@ -8,28 +7,15 @@ import {
   ShieldCheck,
   Zap,
   TrendingUp,
-  CheckCircle2,
-  ChevronRight,
   PieChart as PieIcon,
-  Pin,
-  Check,
-  Star
+  CheckCircle2
 } from 'lucide-react';
 import './IntroLandingPage.css';
 
 export default function IntroLandingPage({ onStartApp }) {
-  const [sampleQuery, setSampleQuery] = useState('');
-
-  const sampleQuestions = [
-    'สรุปยอดขายรวมและจำแนกตามประเภทสินค้า',
-    'เปรียบเทียบสัดส่วนตามแต่ละหมวดหมู่',
-    'ค้นหา 5 อันดับแรกที่มีมูลค่าสูงที่สุด',
-    'แสดงข้อมูลสถิติภาพรวมทั้งหมด'
-  ];
-
-  const handleLaunchWithQuery = (q) => {
+  const handleStart = () => {
     if (onStartApp) {
-      onStartApp(q || sampleQuery);
+      onStartApp('');
     }
   };
 
@@ -48,12 +34,12 @@ export default function IntroLandingPage({ onStartApp }) {
       <div className="ambient-glow glow-center" />
       <div className="ambient-grid-overlay" />
 
-      {/* 1. Glassmorphism Top Navigation Bar */}
+      {/* 1. Top Navigation Bar (Clean & Minimalist) */}
       <header className="intro-navbar">
         <div className="intro-nav-container">
           <div className="intro-brand">
             <div className="brand-logo-glow">
-              <Bot size={22} className="brand-logo-icon" />
+              <Bot size={20} className="brand-logo-icon" />
             </div>
             <div className="brand-titles">
               <span className="brand-name">DataAgent AI</span>
@@ -62,149 +48,86 @@ export default function IntroLandingPage({ onStartApp }) {
           </div>
 
           <nav className="intro-nav-links">
-            <button type="button" onClick={() => scrollToSection('features')} className="nav-link-btn">
-              จุดเด่นระบบ
-            </button>
-            <button type="button" onClick={() => scrollToSection('how-it-works')} className="nav-link-btn">
-              ขั้นตอนการใช้งาน
-            </button>
-            <button type="button" onClick={() => scrollToSection('security')} className="nav-link-btn">
-              ความปลอดภัย
-            </button>
-          </nav>
-
-          <div className="intro-nav-actions">
             <button
               type="button"
-              className="intro-nav-cta-btn"
-              onClick={() => handleLaunchWithQuery('')}
+              onClick={() => scrollToSection('how-it-works')}
+              className="nav-link-btn"
             >
-              <span>เข้าสู่หน้าใช้งาน</span>
-              <ArrowRight size={15} />
+              ขั้นตอนการใช้งาน
             </button>
-          </div>
+            <button
+              type="button"
+              onClick={() => scrollToSection('features')}
+              className="nav-link-btn"
+            >
+              จุดเด่นระบบ
+            </button>
+          </nav>
         </div>
       </header>
 
-      {/* 2. Hero Section (Inspired by Reference Image 1) */}
+      {/* 2. Hero Section */}
       <section className="intro-hero-section">
         <div className="intro-hero-container">
-          {/* Top Pill Badge */}
+          {/* Subtle Status Pill */}
           <div className="hero-pill-badge">
-            <div className="pill-dot" />
-            <Sparkles size={14} className="text-amber-400" />
-            <span>Next-Gen Thai Text-to-SQL & Automated Analytics</span>
+            <span className="pill-dot" />
+            <span>AI Data Analyst Assistant • Team 04</span>
           </div>
 
-          {/* Main Prominent Headline */}
+          {/* Elegant Headline */}
           <h1 className="hero-main-title">
-            Powerful Thai Data Analytics <br />
-            <span className="gradient-text">Begins Right Here for Your Team</span>
+            ระบบวิเคราะห์ข้อมูลอัจฉริยะ <br />
+            <span className="gradient-text">ด้วยการสั่งงานภาษาไทย</span>
           </h1>
 
-          {/* Feature Badges Pills */}
-          <div className="hero-feature-tags">
-            <span className="feature-tag-pill">
-              <Zap size={13} className="text-amber-400" />
-              <span>AI Thai-to-SQL</span>
-            </span>
-            <span className="feature-tag-pill">
-              <ShieldCheck size={13} className="text-emerald-400" />
-              <span>4-Layer Sandbox</span>
-            </span>
-            <span className="feature-tag-pill">
-              <FileSpreadsheet size={13} className="text-blue-400" />
-              <span>Excel & CSV Ready</span>
-            </span>
-            <span className="feature-tag-pill">
-              <TrendingUp size={13} className="text-purple-400" />
-              <span>Executive Insights</span>
-            </span>
-          </div>
-
-          {/* Sub-headline description */}
+          {/* Concise Subtitle */}
           <p className="hero-subtitle">
-            หยุดเสียเวลากับสูตร Excel ที่ซับซ้อน หรือการเขียนคำสั่ง SQL เอง 
-            เพียงแค่นำเข้าชุดข้อมูลและพิมพ์คำถามภาษาไทย AI จะแปลงคำถามเป็นคำสั่ง SQL ที่ปลอดภัย 
-            วิเคราะห์สถิติ และสร้างบทสรุปพร้อมแผนภูมิสถิติอัตโนมัติในไม่กี่วินาที
+            แปลงคำถามภาษาไทยเป็นคำสั่ง SQL สรุปผลทางสถิติ และสร้างแผนภูมิอัตโนมัติบนสภาพแวดล้อมที่ปลอดภัย
           </p>
 
-          {/* Interactive Hero Input Box & CTA Button */}
-          <div className="hero-action-box">
-            <div className="hero-input-wrapper">
-              <input
-                type="text"
-                className="hero-query-input"
-                placeholder="พิมพ์คำถามภาษาไทย เช่น: สรุปยอดรวมและเปรียบเทียบตามหมวดหมู่..."
-                value={sampleQuery}
-                onChange={(e) => setSampleQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleLaunchWithQuery(sampleQuery);
-                }}
-              />
-              <button
-                type="button"
-                className="hero-submit-btn"
-                onClick={() => handleLaunchWithQuery(sampleQuery)}
-              >
-                <span>เริ่มใช้งานทันที</span>
-                <ChevronRight size={16} />
-              </button>
-            </div>
-
-            {/* Quick Sample Query Chips */}
-            <div className="hero-sample-chips">
-              <span className="sample-label">ลองเลือกคำถามตัวอย่าง:</span>
-              <div className="chips-list">
-                {sampleQuestions.map((q, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    className="sample-chip-btn"
-                    onClick={() => handleLaunchWithQuery(q)}
-                  >
-                    <span>{q}</span>
-                    <ArrowRight size={11} className="chip-arrow" />
-                  </button>
-                ))}
-              </div>
-            </div>
+          {/* Single Smooth Start CTA Button */}
+          <div className="hero-cta-wrapper">
+            <button
+              type="button"
+              className="hero-start-btn"
+              onClick={handleStart}
+            >
+              <span>Start</span>
+              <ArrowRight size={18} className="start-btn-icon" />
+            </button>
           </div>
 
-          {/* Trust Indicators / Badges */}
+          {/* Understated Highlights */}
           <div className="hero-trust-indicators">
             <div className="trust-item">
-              <div className="trust-stars">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} size={13} className="star-filled" fill="#f59e0b" />
-                ))}
-              </div>
-              <span className="trust-label">100% Zero Hallucination Guarantee</span>
+              <Zap size={15} className="trust-icon text-blue-400" />
+              <span className="trust-label">NL-to-SQL Engine</span>
             </div>
             <div className="trust-divider" />
             <div className="trust-item">
-              <ShieldCheck size={16} className="text-emerald-400" />
-              <span className="trust-label">4-Layer Defense-in-Depth Sandbox</span>
+              <ShieldCheck size={15} className="trust-icon text-indigo-400" />
+              <span className="trust-label">Secure Sandbox</span>
             </div>
             <div className="trust-divider" />
             <div className="trust-item">
-              <Zap size={16} className="text-blue-400" />
-              <span className="trust-label">Groq High-Speed LLM & SQLite WAL</span>
+              <BarChart3 size={15} className="trust-icon text-teal-400" />
+              <span className="trust-label">Automated Insights</span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 3. How It Works Section (Inspired by Reference Image 2: 3 Simple Steps) */}
+      {/* 3. Section 1: ขั้นตอนการใช้งาน (How It Works) */}
       <section id="how-it-works" className="intro-steps-section">
         <div className="steps-container">
           <div className="section-header-centered">
-            <span className="section-pill-tag">HOW IT WORKS</span>
+            <span className="section-pill-tag">WORKFLOW</span>
             <h2 className="section-title">
-              How to Create a Data Dashboard Online in <span className="highlight-text">3 Simple Steps</span>
+              ขั้นตอนการใช้งาน <span className="highlight-text">3 ขั้นตอน</span>
             </h2>
             <p className="section-subtitle">
-              From raw Excel or CSV data to a complete AI-generated interactive dashboard with multiple charts, KPI cards, data insights, and intelligent auto-layout
+              เริ่มต้นเปลี่ยนชุดข้อมูลสเปรดชีตให้กลายเป็นรายงานและแดชบอร์ดสรุปผลได้อย่างรวดเร็ว
             </p>
           </div>
 
@@ -219,7 +142,7 @@ export default function IntroLandingPage({ onStartApp }) {
                     <span className="dot dot-y" />
                     <span className="dot dot-g" />
                   </div>
-                  <span className="mockup-title">dataset_upload.xlsx</span>
+                  <span className="mockup-title">dataset.xlsx</span>
                 </div>
                 <div className="mockup-body mockup-spreadsheets">
                   <div className="spreadsheet-grid">
@@ -240,31 +163,20 @@ export default function IntroLandingPage({ onStartApp }) {
                     </div>
                   </div>
                   <div className="mockup-file-badge">
-                    <FileSpreadsheet size={15} className="text-emerald-400" />
-                    <span>Excel, CSV, TSV Data Files</span>
+                    <FileSpreadsheet size={14} className="text-blue-400" />
+                    <span>CSV, Excel (.xlsx, .xls)</span>
                   </div>
                 </div>
               </div>
 
               <div className="step-card-content">
                 <div className="step-badge-icon step-icon-1">
-                  <FileSpreadsheet size={20} />
+                  <FileSpreadsheet size={18} />
                 </div>
-                <h3 className="step-heading">1. Upload Your Excel or CSV Data</h3>
+                <h3 className="step-heading">1. นำเข้าชุดข้อมูล</h3>
                 <p className="step-desc">
-                  Connect your data source by uploading Excel (.xlsx, .xls), CSV, or TSV files. 
-                  The AI automatically profiles every column, detects Thai encodings (CP874, UTF-8), and flags personal data (PDPA/PII).
+                  อัปโหลดไฟล์ CSV หรือ Excel ระบบจะตรวจสอบประเภทของข้อมูลและเข้ารหัสภาษาไทยให้อัตโนมัติ พร้อมตรวจจับความปลอดภัย
                 </p>
-                <div className="step-feature-list">
-                  <span className="feature-check-item">
-                    <Check size={13} className="text-emerald-400" />
-                    <span>Auto Type Inference (INTEGER, REAL, DATE, TEXT)</span>
-                  </span>
-                  <span className="feature-check-item">
-                    <Check size={13} className="text-emerald-400" />
-                    <span>Auto Encoding & PDPA Privacy Warning</span>
-                  </span>
-                </div>
               </div>
             </div>
 
@@ -277,12 +189,12 @@ export default function IntroLandingPage({ onStartApp }) {
                     <span className="dot dot-y" />
                     <span className="dot dot-g" />
                   </div>
-                  <span className="mockup-title">AI Deep Analysis Pipeline</span>
+                  <span className="mockup-title">AI Processing Pipeline</span>
                 </div>
                 <div className="mockup-body mockup-analysis">
                   <div className="radar-circle-center">
                     <div className="radar-pulse" />
-                    <Sparkles size={24} className="radar-sparkle text-emerald-400" />
+                    <Bot size={22} className="radar-sparkle text-indigo-400" />
                   </div>
                   <div className="radar-nodes">
                     <div className="radar-node node-charts">Charts</div>
@@ -291,31 +203,19 @@ export default function IntroLandingPage({ onStartApp }) {
                     <div className="radar-node node-sql">SQL Sandbox</div>
                   </div>
                   <div className="mockup-status-badge">
-                    <Bot size={13} className="text-emerald-400" />
-                    <span>Analyzing patterns & generating safe SQL...</span>
+                    <span>Query execution inside read-only sandbox</span>
                   </div>
                 </div>
               </div>
 
               <div className="step-card-content">
                 <div className="step-badge-icon step-icon-2">
-                  <Bot size={20} />
+                  <Bot size={18} />
                 </div>
-                <h3 className="step-heading">2. AI Deep Analysis & Dashboard Generation</h3>
+                <h3 className="step-heading">2. ประมวลผลคำถามด้วย AI</h3>
                 <p className="step-desc">
-                  AI performs deep natural language translation, selects optimal chart types for each metric, 
-                  executes queries inside a secure read-only sandbox, and heals SQL automatically if errors occur.
+                  แปลงคำถามภาษาไทยเป็นคำสั่ง SQL ผ่านโมเดลภาษา พร้อมตรวจสอบและประมวลผลบนฐานข้อมูลในสภาพแวดล้อมที่ปลอดภัย
                 </p>
-                <div className="step-feature-list">
-                  <span className="feature-check-item">
-                    <Check size={13} className="text-emerald-400" />
-                    <span>Agentic Self-Healing Loop (Max 2 Retries)</span>
-                  </span>
-                  <span className="feature-check-item">
-                    <Check size={13} className="text-emerald-400" />
-                    <span>Read-Only SQLite Engine Sandbox (Timeout 10s)</span>
-                  </span>
-                </div>
               </div>
             </div>
 
@@ -328,7 +228,7 @@ export default function IntroLandingPage({ onStartApp }) {
                     <span className="dot dot-y" />
                     <span className="dot dot-g" />
                   </div>
-                  <span className="mockup-title">Complete Dashboard Ready</span>
+                  <span className="mockup-title">Dashboard Preview</span>
                 </div>
                 <div className="mockup-body mockup-dashboard">
                   <div className="kpi-mini-grid">
@@ -342,7 +242,7 @@ export default function IntroLandingPage({ onStartApp }) {
                     </div>
                     <div className="kpi-mini-card">
                       <span className="kpi-label">รายการ</span>
-                      <strong className="kpi-val text-purple-400">12,847</strong>
+                      <strong className="kpi-val text-indigo-400">12,847</strong>
                     </div>
                   </div>
                   <div className="chart-mini-bars">
@@ -353,38 +253,27 @@ export default function IntroLandingPage({ onStartApp }) {
                     <div className="bar-col bar-5" style={{ height: '80%' }} />
                   </div>
                   <div className="mockup-insight-pill">
-                    <CheckCircle2 size={13} className="text-emerald-400" />
-                    <span>Complete Dashboard Ready</span>
+                    <CheckCircle2 size={13} className="text-teal-400" />
+                    <span>Dashboard Ready</span>
                   </div>
                 </div>
               </div>
 
               <div className="step-card-content">
                 <div className="step-badge-icon step-icon-3">
-                  <BarChart3 size={20} />
+                  <BarChart3 size={18} />
                 </div>
-                <h3 className="step-heading">3. Review Insights & Export Dashboard</h3>
+                <h3 className="step-heading">3. สรุปผลและแสดงแดชบอร์ด</h3>
                 <p className="step-desc">
-                  Get a complete interactive dashboard with multiple charts (Bar, Line, Area, Pie), 
-                  executive summary in Thai, and export capabilities as 2x Retina PNG or formatted CSV tables.
+                  รับคำตอบพร้อมแผนภูมิสถิติที่เหมาะสม ตารางผลลัพธ์ที่ค้นหาได้ และปักหมุดข้อมูลลงบนแดชบอร์ดเพื่อวิเคราะห์ต่อ
                 </p>
-                <div className="step-feature-list">
-                  <span className="feature-check-item">
-                    <Check size={13} className="text-emerald-400" />
-                    <span>Executive Insights without Hallucination</span>
-                  </span>
-                  <span className="feature-check-item">
-                    <Check size={13} className="text-emerald-400" />
-                    <span>High-Res 2x Retina PNG & Full CSV Export</span>
-                  </span>
-                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 4. Core Features Showcase Grid */}
+      {/* 4. Section 2: จุดเด่นระบบ (Features & Capabilities) */}
       <section id="features" className="intro-features-section">
         <div className="features-container">
           <div className="section-header-centered">
@@ -393,119 +282,68 @@ export default function IntroLandingPage({ onStartApp }) {
               จุดเด่นสำคัญของ <span className="gradient-text">DataAgent AI</span>
             </h2>
             <p className="section-subtitle">
-              เทคโนโลยีที่ผสานการประมวลผลภาษาธรรมชาติ สถิติเชิงปริมาณ และความปลอดภัยระดับองค์กรเข้าไว้ด้วยกัน
+              เทคโนโลยีการประมวลผลภาษาธรรมชาติและระบบความปลอดภัยสำหรับงานวิเคราะห์ข้อมูล
             </p>
           </div>
 
           <div className="features-grid-cards">
             <div className="feature-highlight-card">
               <div className="feature-card-icon icon-blue">
-                <Zap size={22} />
+                <Zap size={20} />
               </div>
               <h4 className="feature-title">Thai Text-to-SQL Translation</h4>
               <p className="feature-desc">
-                แปลงคำถามภาษาไทยทั่วไปให้กลายเป็นชุดคำสั่ง SQLite Query ที่แม่นยำ พร้อม Few-Shot Learning 
-                เข้าใจบริบทตารางและชื่อคอลัมน์ภาษาไทยได้อย่างเป็นธรรมชาติ
+                แปลงคำถามภาษาไทยทั่วไปเป็นคำสั่ง SQL ที่แม่นยำ พร้อม Few-Shot Learning เข้าใจชื่อตารางและคอลัมน์ภาษาไทยอย่างเป็นธรรมชาติ
               </p>
             </div>
 
             <div className="feature-highlight-card">
-              <div className="feature-card-icon icon-emerald">
-                <ShieldCheck size={22} />
+              <div className="feature-card-icon icon-indigo">
+                <ShieldCheck size={20} />
               </div>
-              <h4 className="feature-title">4-Layer Defense Sandbox</h4>
+              <h4 className="feature-title">Secure Read-Only Sandbox</h4>
               <p className="feature-desc">
-                รันคำสั่งภายใต้กรงขังความปลอดภัย 4 ชั้น: Pre-validation, AST Sanitizer, 
-                SQLite C-Engine `PRAGMA query_only = ON;`, Timeout 10s และจำกัดแถว 500 รายการ
+                รันคำสั่งภายใต้การป้องกัน 4 ชั้น ป้องกันคำสั่งดัดแปลงหรือลบข้อมูล ประมวลผลแบบ Read-Only และมีระบบจำกัดเวลาทำงาน
               </p>
             </div>
 
             <div className="feature-highlight-card">
-              <div className="feature-card-icon icon-purple">
-                <Bot size={22} />
+              <div className="feature-card-icon icon-teal">
+                <PieIcon size={20} />
               </div>
-              <h4 className="feature-title">Agentic Self-Healing Loop</h4>
+              <h4 className="feature-title">Automated Chart Selection</h4>
               <p className="feature-desc">
-                หากคำสั่ง SQL รันไม่ผ่าน AI จะอ่านสาเหตุของข้อผิดพลาดและวิเคราะห์ Schema 
-                เพื่อซ่อมแซมคำสั่งให้อัตโนมัติสูงสุด 2 รอบโดยที่ผู้ใช้ไม่ต้องพิมพ์สั่งใหม่
+                เลือกและสร้างแผนภูมิแท่ง แผนภูมิเส้น หรือแผนภูมิวงกลมที่เหมาะสมกับลักษณะตัวเลขและข้อมูลสถิติให้อัตโนมัติ
               </p>
             </div>
 
             <div className="feature-highlight-card">
-              <div className="feature-card-icon icon-amber">
-                <TrendingUp size={22} />
+              <div className="feature-card-icon icon-blue">
+                <TrendingUp size={20} />
               </div>
-              <h4 className="feature-title">Zero-Hallucination Insights</h4>
+              <h4 className="feature-title">Interactive Dashboard & Export</h4>
               <p className="feature-desc">
-                รายงานสถิติ ยอดรวม ค่าเฉลี่ย สูงสุด ต่ำสุด สำหรับผู้บริหารอย่างกระชับ 
-                ระบุหน่วยจริง (เช่น บาท, ชิ้น, ร้อยละ) ตามข้อมูลในตาราง ไม่มีการมโนตัวเลข
-              </p>
-            </div>
-
-            <div className="feature-highlight-card">
-              <div className="feature-card-icon icon-cyan">
-                <PieIcon size={22} />
-              </div>
-              <h4 className="feature-title">Smart Chart Recommender</h4>
-              <p className="feature-desc">
-                เลือกและสร้างกราฟที่เหมาะสมที่สุดโดยอัตโนมัติ (Bar, Line, Area, Pie Chart) 
-                สามารถสลับประเภทกราฟได้ตามใจชอบ และส่งออกภาพ PNG คมชัดสูง 2x Retina
-              </p>
-            </div>
-
-            <div className="feature-highlight-card">
-              <div className="feature-card-icon icon-rose">
-                <Pin size={22} />
-              </div>
-              <h4 className="feature-title">Pinned Dashboard & Table Viewer</h4>
-              <p className="feature-desc">
-                ปักหมุดกราฟและข้อสรุปที่สนใจลงบนหน้าปัดแดชบอร์ดเพื่อพิมพ์เป็นรายงาน PDF 
-                พร้อมตารางข้อมูลผลลัพธ์ที่สามารถขยายดูแบบเต็มจอ (Fullscreen) ได้อย่างสบายตา
+                ปักหมุดกราฟเพื่อสร้างแดชบอร์ดสรุปผลภาพรวม ตรวจสอบข้อมูลดิบในตาราง และดาวน์โหลดไฟล์ผลลัพธ์เป็น CSV (UTF-8 BOM) ได้ทันที
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 5. Bottom Call to Action Section */}
-      <section className="intro-bottom-cta-section">
-        <div className="bottom-cta-container">
-          <div className="cta-glow-bg" />
-          <div className="cta-content">
-            <h2 className="cta-title">
-              พร้อมเริ่มต้นวิเคราะห์ข้อมูลของคุณหรือยัง?
-            </h2>
-            <p className="cta-subtitle">
-              สัมผัสประสบการณ์การวิเคราะห์ข้อมูลรูปแบบใหม่ ด้วย AI ผู้ช่วยภาษาไทยที่ใช้งานง่ายและปลอดภัย
-            </p>
-            <div className="cta-buttons-group">
-              <button
-                type="button"
-                className="cta-primary-btn"
-                onClick={() => handleLaunchWithQuery('')}
-              >
-                <span>เข้าสู่ระบบ DataAgent AI ทันที</span>
-                <ArrowRight size={17} />
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 6. Footer */}
+      {/* 5. Minimalist Professional Footer */}
       <footer className="intro-footer">
         <div className="footer-container">
           <div className="footer-left">
             <div className="footer-brand">
-              <Bot size={18} className="text-blue-400" />
+              <Bot size={16} className="text-blue-400" />
               <span>DataAgent AI</span>
             </div>
             <p className="footer-copy">
-              ระบบผู้ช่วยวิเคราะห์ข้อมูลอัจฉริยะด้วยภาษาธรรมชาติและสถิติเชิงลึก (Team 04)
+              ระบบผู้ช่วยวิเคราะห์ข้อมูลอัจฉริยะ (Team 04)
             </p>
           </div>
           <div className="footer-right">
-            <span>Powered by FastAPI • React • LangChain • Groq AI • SQLite</span>
+            <span>Powered by FastAPI • React • LangChain • SQLite</span>
           </div>
         </div>
       </footer>
